@@ -1,5 +1,5 @@
-// Package client implements the single request/response round trip that diagctl
-// performs against a diagd server over TLS.
+// Package client implements the single request/response round trip that the rpeek client
+// performs against an rpeek server over TLS.
 package client
 
 import (
@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"time"
 
-	"diag/internal/protocol"
-	"diag/internal/tlsutil"
+	"rpeek/internal/protocol"
+	"rpeek/internal/tlsutil"
 )
 
 // callTimeout bounds the whole dial/write/read round trip.
@@ -21,7 +21,7 @@ const callTimeout = 60 * time.Second
 // It exceeds the server's default output cap to leave headroom for JSON escaping.
 const maxResponseLine = 16 << 20
 
-// Call dials the diagd server at host over TLS, sends one request for the named tool
+// Call dials the rpeek server at host over TLS, sends one request for the named tool
 // with the given token and arguments, reads one response, and returns it. Args is
 // marshalled to JSON; pass nil for tools that take no arguments. The returned error is
 // non-nil only for transport or protocol failures — a tool error reported by the

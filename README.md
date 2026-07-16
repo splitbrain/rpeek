@@ -1,13 +1,13 @@
-# diag — remote read-only diagnostic tool
+# rpeek — remote read-only diagnostic tool
 
 One small Go binary that lets an operator inspect a remote server **read-only**, without
 copy-pasting logs and configs by hand.
 
-- **`diag serve`** — the server. Copied onto the remote host and run there. Listens on
+- **`rpeek serve`** — the server. Copied onto the remote host and run there. Listens on
   TLS, authenticates callers with a token it prints at startup, and exposes a fixed set
   of read-only diagnostic tools implemented directly in Go (no shell, no command
   parsing).
-- **`diag <tool>`** — the client. A one-shot CLI run on the operator's machine. Each
+- **`rpeek <tool>`** — the client. A one-shot CLI run on the operator's machine. Each
   invocation dials the server, authenticates, runs one tool, prints the result, exits.
 
 The same binary is both roles; the first argument selects one. It is **read-only by
@@ -31,44 +31,44 @@ argument vector.
 ## Build
 
 ```sh
-CGO_ENABLED=0 go build -ldflags "-s -w" -o diag ./cmd/diag
+CGO_ENABLED=0 go build -ldflags "-s -w" -o rpeek ./cmd/rpeek
 
 # cross-compile for the target host, e.g.:
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o diag ./cmd/diag
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o diag ./cmd/diag
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o rpeek ./cmd/rpeek
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o rpeek ./cmd/rpeek
 ```
 
 No third-party dependencies — standard library only.
 
 ## Run the server
 
-`scp` `diag` to the remote host and run `diag serve` there, naming the directories file
+`scp` `rpeek` to the remote host and run `rpeek serve` there, naming the directories file
 tools may read within (the **jail roots**). With no roots, it defaults to the current
 directory.
 
 ```sh
-diag serve /var/log /etc       # two jail roots
-diag serve                     # one jail root: the current working directory
+rpeek serve /var/log /etc       # two jail roots
+rpeek serve                     # one jail root: the current working directory
 ```
 
 Startup prints a banner including the token:
 
 ```
-diag serve — read-only diagnostic server
+rpeek serve — read-only diagnostic server
 listen : 0.0.0.0:7017
 jails  : /var/log, /etc   (file tools may read within these)
-token  : 9f2a5c1e...      (pass to the client via --token or DIAG_TOKEN)
+token  : 9f2a5c1e...      (pass to the client via --token or RPEEK_TOKEN)
 ttl    : 30m (shuts down ~14:52)
 tls    : ad-hoc self-signed; client skips verification by design
-tools  : list read grep tail stat ps disk journal   (READ-ONLY)
+tools  : hostname list read grep tail stat ps disk journal   (READ-ONLY)
 ```
 
 Server flags (all follow `serve`):
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--host` | `0.0.0.0` | Bind address, `host` or `host:port` (port defaults to `7017`). Use `127.0.0.1` to restrict to local (e.g. an SSH tunnel). Falls back to `DIAG_HOST`. |
-| `--token` | *(generated)* | Fixed token instead of a generated one. Falls back to `DIAG_TOKEN`. |
+| `--host` | `0.0.0.0` | Bind address, `host` or `host:port` (port defaults to `7017`). Use `127.0.0.1` to restrict to local (e.g. an SSH tunnel). Falls back to `RPEEK_HOST`. |
+| `--token` | *(generated)* | Fixed token instead of a generated one. Falls back to `RPEEK_TOKEN`. |
 | `--ttl` | `30m` | Auto-shutdown after this duration. `0` disables (with a warning). |
 | `--max-output` | `1048576` | Global output byte cap applied by tools. |
 | `--timeout` | `15s` | Per-tool wall-clock timeout. |
@@ -76,7 +76,7 @@ Server flags (all follow `serve`):
 > Passing `--token` on the command line makes the token visible in the host's process
 > list (including via this tool's own `ps`). Prefer the generated token for real use.
 
-> `DIAG_HOST` is read as the *bind* address by `serve` and as the *server* address by a
+> `RPEEK_HOST` is read as the *bind* address by `serve` and as the *server* address by a
 > tool subcommand. Exporting it for querying and then running `serve` in the same shell
 > binds to that address — usually harmless, but it will fail loudly if the address is not
 > local.
@@ -84,24 +84,24 @@ Server flags (all follow `serve`):
 ## Run the client
 
 A tool subcommand is one-shot: connection details come from `--host` / `--token` or the
-`DIAG_HOST` / `DIAG_TOKEN` environment variables (an explicit flag overrides the env
+`RPEEK_HOST` / `RPEEK_TOKEN` environment variables (an explicit flag overrides the env
 var). The host may omit the port, in which case `7017` is used. Connection flags may
 appear before the subcommand or after it (interleaved with the tool's own arguments in
-any order); given in both places, the one after the tool name wins. Run `diag help` for
-the tool list and `diag help <tool>` (or `diag <tool> --help`) for a tool's arguments.
+any order); given in both places, the one after the tool name wins. Run `rpeek help` for
+the tool list and `rpeek help <tool>` (or `rpeek <tool> --help`) for a tool's arguments.
 
 ```sh
-export DIAG_HOST=10.0.0.5          # or 10.0.0.5:7017
-export DIAG_TOKEN=9f2a5c1e...
+export RPEEK_HOST=10.0.0.5          # or 10.0.0.5:7017
+export RPEEK_TOKEN=9f2a5c1e...
 
-diag list  /etc
-diag read  /var/log/syslog --max-bytes 20000 --offset 0
-diag grep  /var/log --pattern "ERROR" --ignore-case --max-matches 500
-diag tail  /var/log/nginx/access.log --lines 200
-diag stat  /etc/hosts
-diag ps
-diag disk
-diag journal --unit nginx --lines 100
+rpeek list  /etc
+rpeek read  /var/log/syslog --max-bytes 20000 --offset 0
+rpeek grep  /var/log --pattern "ERROR" --ignore-case --max-matches 500
+rpeek tail  /var/log/nginx/access.log --lines 200
+rpeek stat  /etc/hosts
+rpeek ps
+rpeek disk
+rpeek journal --unit nginx --lines 100
 ```
 
 The client does no formatting: the server produces CLI-style text and the client relays
@@ -142,20 +142,20 @@ tests.
 
 The tool subcommands are a clean target for an AI agent (e.g. Claude Code) to drive,
 because each call is one-shot, read-only, path-jailed, and bounded. The
-`skills/remote-diag/SKILL.md` file teaches an agent when and how to use it. No
-server-side changes are needed; the skill just runs `diag <tool>` as a human would.
+`skills/rpeek/SKILL.md` file teaches an agent when and how to use it. No
+server-side changes are needed; the skill just runs `rpeek <tool>` as a human would.
 
 ## Layout
 
 ```
-cmd/diag/           single binary: subcommand dispatch, serve, and tool client
+cmd/rpeek/          single binary: subcommand dispatch, serve, and tool client
 internal/tools/     the tools (one file each), the Tool registry, and the path jail
 internal/protocol/  shared wire envelope (newline-delimited JSON)
 internal/tlsutil/   ad-hoc server cert + non-verifying client config
 internal/server/    accept loop, auth, dispatch to the tools registry
 internal/client/    dial + one request/response round trip
 internal/netutil/   shared address helpers (default port)
-skills/remote-diag/ operator-side agent skill
+skills/rpeek/       operator-side agent skill
 ```
 
 Each tool is a self-contained type in `internal/tools` that owns both faces of its

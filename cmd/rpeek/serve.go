@@ -17,13 +17,13 @@ import (
 	"syscall"
 	"time"
 
-	"diag/internal/netutil"
-	"diag/internal/server"
-	"diag/internal/tlsutil"
-	"diag/internal/tools"
+	"rpeek/internal/netutil"
+	"rpeek/internal/server"
+	"rpeek/internal/tlsutil"
+	"rpeek/internal/tools"
 )
 
-// defaultBindHost is the bind address serve uses when neither --host nor DIAG_HOST is
+// defaultBindHost is the bind address serve uses when neither --host nor RPEEK_HOST is
 // set: all interfaces on the default port.
 const defaultBindHost = "0.0.0.0"
 
@@ -35,8 +35,8 @@ const defaultBindHost = "0.0.0.0"
 func runServe(args []string, gHost, gToken string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // render help and errors ourselves for consistent formatting
-	host := fs.String("host", gHost, "bind address host or host:port (or DIAG_HOST); default 0.0.0.0")
-	tokenFlag := fs.String("token", gToken, "fixed auth token (or DIAG_TOKEN); generated if empty")
+	host := fs.String("host", gHost, "bind address host or host:port (or RPEEK_HOST); default 0.0.0.0")
+	tokenFlag := fs.String("token", gToken, "fixed auth token (or RPEEK_TOKEN); generated if empty")
 	ttl := fs.Duration("ttl", 30*time.Minute, "auto-shutdown after this duration; 0 disables")
 	maxOutput := fs.Int("max-output", 1<<20, "global output byte cap applied by tools")
 	timeout := fs.Duration("timeout", 15*time.Second, "per-tool wall-clock timeout")
@@ -50,7 +50,7 @@ func runServe(args []string, gHost, gToken string) int {
 
 	bind := *host
 	if bind == "" {
-		bind = os.Getenv("DIAG_HOST")
+		bind = os.Getenv("RPEEK_HOST")
 	}
 	if bind == "" {
 		bind = defaultBindHost
@@ -76,7 +76,7 @@ func runServe(args []string, gHost, gToken string) int {
 
 	token := *tokenFlag
 	if token == "" {
-		token = os.Getenv("DIAG_TOKEN")
+		token = os.Getenv("RPEEK_TOKEN")
 	}
 	if token == "" {
 		token, err = generateToken()
@@ -134,10 +134,10 @@ func printBanner(w io.Writer, listen string, roots []string, token string, ttl t
 	if ttl > 0 {
 		ttlLine = fmt.Sprintf("%s (shuts down ~%s)", ttl, time.Now().Add(ttl).Format("15:04"))
 	}
-	fmt.Fprintln(w, "diag serve — read-only diagnostic server")
+	fmt.Fprintln(w, "rpeek serve — read-only diagnostic server")
 	fmt.Fprintf(w, "listen : %s\n", listen)
 	fmt.Fprintf(w, "jails  : %s   (file tools may read within these)\n", strings.Join(roots, ", "))
-	fmt.Fprintf(w, "token  : %s   (pass to the client via --token or DIAG_TOKEN)\n", token)
+	fmt.Fprintf(w, "token  : %s   (pass to the client via --token or RPEEK_TOKEN)\n", token)
 	fmt.Fprintf(w, "ttl    : %s\n", ttlLine)
 	fmt.Fprintln(w, "tls    : ad-hoc self-signed; client skips verification by design")
 	fmt.Fprintf(w, "tools  : %s   (READ-ONLY)\n", strings.Join(tools.Names(), " "))
@@ -145,7 +145,7 @@ func printBanner(w io.Writer, listen string, roots []string, token string, ttl t
 
 // printServeHelp writes the serve subcommand's usage and flags to w.
 func printServeHelp(w io.Writer, fs *flag.FlagSet) {
-	fmt.Fprintln(w, "Usage: diag serve [--host HOST[:PORT]] [--token TOKEN] [flags] [roots...]")
+	fmt.Fprintln(w, "Usage: rpeek serve [--host HOST[:PORT]] [--token TOKEN] [flags] [roots...]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Runs the read-only diagnostic server. With no roots given, it jails to the")
 	fmt.Fprintln(w, "current working directory. It prints an auth token at startup for the client")

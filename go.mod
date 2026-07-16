@@ -1,3 +1,3 @@
-module diag
+module rpeek
 
 go 1.24

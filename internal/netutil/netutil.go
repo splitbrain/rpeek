@@ -1,4 +1,4 @@
-// Package netutil holds small address helpers shared by diagd and diagctl so both
+// Package netutil holds small address helpers shared by the rpeek server and client so both
 // agree on the default port.
 package netutil
 

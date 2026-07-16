@@ -1,4 +1,4 @@
-// Package protocol defines the newline-delimited JSON wire contract shared by the diag
+// Package protocol defines the newline-delimited JSON wire contract shared by the rpeek
 // server and client. A client sends exactly one Request and reads exactly one Response
 // per connection. The tool-specific argument types live with their tools; the wire
 // carries them as opaque raw JSON.

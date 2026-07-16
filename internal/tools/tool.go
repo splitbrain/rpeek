@@ -1,5 +1,5 @@
-// Package tools defines the read-only diagnostic tools shared by the diag server and
-// the diag client. Each tool is a self-contained type that owns both faces of its
+// Package tools defines the read-only diagnostic tools shared by the rpeek server and
+// the rpeek client. Each tool is a self-contained type that owns both faces of its
 // operation: the client-side CLI flags that build its wire arguments, and the
 // server-side execution that produces its output.
 package tools

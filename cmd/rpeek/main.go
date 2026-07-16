@@ -1,4 +1,4 @@
-// Command diag is the read-only remote diagnostic tool. With the "serve" subcommand it
+// Command rpeek is the read-only remote diagnostic tool. With the "serve" subcommand it
 // runs the diagnostic server, copied onto a remote host and run there. With a tool
 // subcommand it acts as a one-shot client that dials a server, runs one tool, prints
 // the result, and exits.
@@ -11,8 +11,8 @@ import (
 	"io"
 	"os"
 
-	"diag/internal/netutil"
-	"diag/internal/tools"
+	"rpeek/internal/netutil"
+	"rpeek/internal/tools"
 )
 
 // Process exit codes.
@@ -36,10 +36,10 @@ func run(args []string) int {
 	// The flag package stops parsing at the first non-flag argument, which is the
 	// subcommand, so any leading --host/--token are consumed here and the rest is left
 	// for the subcommand to parse.
-	gfs := flag.NewFlagSet("diag", flag.ContinueOnError)
+	gfs := flag.NewFlagSet("rpeek", flag.ContinueOnError)
 	gfs.SetOutput(io.Discard)
-	gHost := gfs.String("host", "", "server address (or DIAG_HOST)")
-	gToken := gfs.String("token", "", "auth token (or DIAG_TOKEN)")
+	gHost := gfs.String("host", "", "server address (or RPEEK_HOST)")
+	gToken := gfs.String("token", "", "auth token (or RPEEK_TOKEN)")
 	if err := gfs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			printGeneralHelp(os.Stdout)
@@ -62,7 +62,7 @@ func run(args []string) int {
 	default:
 		tool, ok := tools.Lookup(rest[0])
 		if !ok {
-			return usageErr("unknown command %q (run 'diag help' for the list)", rest[0])
+			return usageErr("unknown command %q (run 'rpeek help' for the list)", rest[0])
 		}
 		return runTool(tool, rest[1:], *gHost, *gToken)
 	}
@@ -74,17 +74,17 @@ func run(args []string) int {
 func resolveHostToken(hostFlag, tokenFlag string) (host, token string, code int) {
 	host = hostFlag
 	if host == "" {
-		host = os.Getenv("DIAG_HOST")
+		host = os.Getenv("RPEEK_HOST")
 	}
 	token = tokenFlag
 	if token == "" {
-		token = os.Getenv("DIAG_TOKEN")
+		token = os.Getenv("RPEEK_TOKEN")
 	}
 	if host == "" {
-		return "", "", usageErr("no server address: set --host or DIAG_HOST")
+		return "", "", usageErr("no server address: set --host or RPEEK_HOST")
 	}
 	if token == "" {
-		return "", "", usageErr("no token: set --token or DIAG_TOKEN")
+		return "", "", usageErr("no token: set --token or RPEEK_TOKEN")
 	}
 	addr, err := netutil.NormalizeAddr(host)
 	if err != nil {
@@ -95,12 +95,12 @@ func resolveHostToken(hostFlag, tokenFlag string) (host, token string, code int)
 
 // usageErr prints a formatted usage error to stderr and returns the usage exit code.
 func usageErr(format string, args ...any) int {
-	fmt.Fprintf(os.Stderr, "diag: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "rpeek: "+format+"\n", args...)
 	return exitUsage
 }
 
 // fatalf prints a formatted runtime error to stderr and returns the general error code.
 func fatalf(format string, args ...any) int {
-	fmt.Fprintf(os.Stderr, "diag: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "rpeek: "+format+"\n", args...)
 	return exitError
 }

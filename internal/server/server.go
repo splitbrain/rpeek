@@ -1,4 +1,4 @@
-// Package server implements the diag serve accept loop: the listener, per-connection
+// Package server implements the rpeek serve accept loop: the listener, per-connection
 // authentication, the request/response envelope, and dispatch to the tools registry.
 // The tools themselves and the path jail live in the tools package.
 package server
@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"diag/internal/protocol"
-	"diag/internal/tools"
+	"rpeek/internal/protocol"
+	"rpeek/internal/tools"
 )
 
 // connReadTimeout bounds how long a connected client has to send its request and
@@ -25,7 +25,7 @@ const connReadTimeout = 30 * time.Second
 // maxRequestLine bounds the size of a single request line the server will read.
 const maxRequestLine = 1 << 20
 
-// Server holds the runtime configuration for a diag serve instance.
+// Server holds the runtime configuration for a rpeek serve instance.
 type Server struct {
 	// env carries the shared tool dependencies (jail, limits, journalctl path) reused
 	// for every request.

@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"diag/internal/client"
-	"diag/internal/server"
-	"diag/internal/tlsutil"
-	"diag/internal/tools"
+	"rpeek/internal/client"
+	"rpeek/internal/server"
+	"rpeek/internal/tlsutil"
+	"rpeek/internal/tools"
 )
 
-// startServer spins up a diagd on an ephemeral loopback port with the given jail root
+// startServer spins up an rpeek server on an ephemeral loopback port with the given jail root
 // and token, returning its address and a cancel function.
 func startServer(t *testing.T, root, token string) (addr string, cancel func()) {
 	t.Helper()

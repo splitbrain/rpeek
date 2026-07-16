@@ -1,72 +1,72 @@
 ---
-name: remote-diag
+name: rpeek
 description: >
-  Inspect a remote host that is running the read-only `diag serve` diagnostic server.
+  Inspect a remote host that is running the read-only `rpeek serve` diagnostic server.
   Use when the user wants to read logs, configs, process state, disk usage, or
-  journald on a remote machine reachable via the `diag` client — e.g. "check why nginx
+  journald on a remote machine reachable via the `rpeek` client — e.g. "check why nginx
   is down on 10.0.0.5", "tail the app log on the prod box", "what's eating disk there".
   Do NOT use for the local machine (use normal shell tools) or for anything that
   writes/mutates — this server is read-only by design.
 ---
 
-# Remote diagnostics via diag
+# Remote diagnostics via rpeek
 
 ## Preconditions
-- `diag` is on PATH.
+- `rpeek` is on PATH.
 - Connection details — a host (or host:port; the port defaults to 7017) and a token,
   both required — come from one of two sources, in this precedence:
-  1. Positional args to this skill, invoked as `/remote-diag <host> <token>`. Both are
+  1. Positional args to this skill, invoked as `/rpeek <host> <token>`. Both are
      mandatory; the token is never optional.
-  2. The environment: `DIAG_HOST` and `DIAG_TOKEN`, if already exported.
+  2. The environment: `RPEEK_HOST` and `RPEEK_TOKEN`, if already exported.
   If a host or token is missing from both, ask the user — never guess a host or
   fabricate a token.
-- Confirm reachability and authorization with a cheap call (`diag hostname`) before a
+- Confirm reachability and authorization with a cheap call (`rpeek hostname`) before a
   long investigation; it needs no jail and its output names the host that answered.
 
 ## Applying the connection details
 Shell state does not persist between calls and no token file is used, so the host and
-token must accompany every `diag` invocation:
+token must accompany every `rpeek` invocation:
 - Given as positional args to the skill: prefix each call inline via environment
-  variables — `DIAG_HOST=<host> DIAG_TOKEN=<token> diag <tool> [args]` — reusing the
+  variables — `RPEEK_HOST=<host> RPEEK_TOKEN=<token> rpeek <tool> [args]` — reusing the
   same values for every call this session.
-- Already exported in the environment: call `diag <tool> [args]` directly.
-Pass the token only through `DIAG_TOKEN`, never via `--token`.
+- Already exported in the environment: call `rpeek <tool> [args]` directly.
+Pass the token only through `RPEEK_TOKEN`, never via `--token`.
 
 ## Discovering the tools
 The toolset is self-describing — do not rely on a hardcoded list, since it can change
 between versions:
-- `diag help` — lists the available tools, each with a one-line summary.
-- `diag help <tool>` (or `diag <tool> --help`) — prints that tool's arguments and
+- `rpeek help` — lists the available tools, each with a one-line summary.
+- `rpeek help <tool>` (or `rpeek <tool> --help`) — prints that tool's arguments and
   flags with their defaults and meanings.
 
-Run `diag help` first whenever you are unsure what is available or what a tool
+Run `rpeek help` first whenever you are unsure what is available or what a tool
 accepts; it is the authoritative reference. Every tool is READ-ONLY, and `help` needs no
 host or token.
 
 ## How to use
-Every invocation is one-shot: `diag <tool> [args]`, carrying the connection details as
-described above. A tool's own flags and its path may appear in any order (`diag read /p
---max-bytes 200` and `diag read --max-bytes 200 /p` are equivalent). Read `stdout` as if
+Every invocation is one-shot: `rpeek <tool> [args]`, carrying the connection details as
+described above. A tool's own flags and its path may appear in any order (`rpeek read /p
+--max-bytes 200` and `rpeek read --max-bytes 200 /p` are equivalent). Read `stdout` as if
 it were the output of the equivalent Unix command; it is already formatted server-side. On
 a non-zero exit, read `stderr` and adapt — do not retry the identical command.
 
-Representative calls (connection prefix omitted for brevity; see `diag help <tool>` for
+Representative calls (connection prefix omitted for brevity; see `rpeek help <tool>` for
 each tool's full argument set):
 
 ```
-diag hostname
-diag list /var/log
-diag read /etc/nginx/nginx.conf --max-bytes 20000
-diag grep /var/log --pattern "ERROR" --ignore-case
-diag tail /var/log/nginx/error.log --lines 200
-diag stat /etc/hosts
-diag ps
-diag disk
-diag journal --unit nginx --lines 100
+rpeek hostname
+rpeek list /var/log
+rpeek read /etc/nginx/nginx.conf --max-bytes 20000
+rpeek grep /var/log --pattern "ERROR" --ignore-case
+rpeek tail /var/log/nginx/error.log --lines 200
+rpeek stat /etc/hosts
+rpeek ps
+rpeek disk
+rpeek journal --unit nginx --lines 100
 ```
 
 ## Rules
-- Use only the tools `diag help` reports. Do not invent flags or tools; there is no
+- Use only the tools `rpeek help` reports. Do not invent flags or tools; there is no
   write, delete, restart, or "run command" capability, by design.
 - Paths are the host's **real** paths and must fall inside a jail root the operator
   granted. A "not within any allowed root" error means the directory was not granted
@@ -76,7 +76,7 @@ diag journal --unit nginx --lines 100
   (tighter `--pattern`, larger `--max-bytes` with `--offset` paging, fewer `--lines`)
   rather than assuming you saw everything.
 - Never print the token in prose or reports, and never pass it via `--token`; supply it
-  only through the `DIAG_TOKEN` environment variable.
+  only through the `RPEEK_TOKEN` environment variable.
 
 ## Exit codes
 `0` success · `1` protocol/transport error · `2` server-returned error (bad path,
@@ -99,9 +99,9 @@ is wrong — stop and ask the user; do not brute-force.
 Example (user: "nginx is down on the prod box, why?"):
 
 ```
-diag ps                                  # is nginx running? -> not in the table
-diag journal --unit nginx --lines 50     # why did it stop? -> "bind() to :443 failed"
-diag grep /etc/nginx --pattern "listen"  # what claims 443? -> two server blocks
-diag disk                                # rule out a full disk -> plenty free
+rpeek ps                                  # is nginx running? -> not in the table
+rpeek journal --unit nginx --lines 50     # why did it stop? -> "bind() to :443 failed"
+rpeek grep /etc/nginx --pattern "listen"  # what claims 443? -> two server blocks
+rpeek disk                                # rule out a full disk -> plenty free
 # -> report: duplicate `listen 443` in <file:line>; nginx aborts on bind conflict.
 ```

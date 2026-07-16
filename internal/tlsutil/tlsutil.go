@@ -1,4 +1,4 @@
-// Package tlsutil provides the shared TLS configuration for diagd and diagctl. The
+// Package tlsutil provides the shared TLS configuration for the rpeek server and client. The
 // server uses an in-memory ad-hoc self-signed certificate; the client skips
 // verification. The session token authenticates the caller, while TLS provides
 // confidentiality against passive eavesdropping.
@@ -36,12 +36,12 @@ func ServerTLSConfig() (*tls.Config, error) {
 	now := time.Now()
 	template := x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: "diagd"},
+		Subject:      pkix.Name{CommonName: "rpeek"},
 		NotBefore:    now.Add(-time.Minute),
 		NotAfter:     now.Add(certTTL),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:     []string{"diagd"},
+		DNSNames:     []string{"rpeek"},
 	}
 
 	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)

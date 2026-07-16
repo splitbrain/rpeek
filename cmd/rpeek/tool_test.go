@@ -7,7 +7,7 @@ import (
 	"io"
 	"testing"
 
-	"diag/internal/tools"
+	"rpeek/internal/tools"
 )
 
 // buildArgs drives a tool's client-side flag parsing the way runTool does — building the
