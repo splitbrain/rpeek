@@ -31,6 +31,13 @@ argument vector.
 ## Build
 
 ```sh
+make build      # static binary into bin/rpeek, version stamped from git
+make help       # list all targets
+```
+
+Or build directly with the Go toolchain:
+
+```sh
 CGO_ENABLED=0 go build -ldflags "-s -w" -o rpeek ./cmd/rpeek
 
 # cross-compile for the target host, e.g.:
@@ -38,12 +45,14 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o rpeek ./cmd/rpeek
 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o rpeek ./cmd/rpeek
 ```
 
-Stamp a version into the binary (release builds do this automatically) with the linker's
-`-X` flag; unstamped builds report `dev`:
+`make build` stamps the version from `git describe` automatically; unstamped builds report
+`dev`. With the Go toolchain, pass it via the linker's `-X` flag:
 
 ```sh
 go build -ldflags "-s -w -X rpeek/internal/version.Version=v1.2.3" -o rpeek ./cmd/rpeek
 ```
+
+`make dist` cross-compiles the release archives locally for every supported platform.
 
 Tagged releases (`vX.Y.Z`) are built for Linux and macOS on `amd64` and `arm64` by the
 GitHub Actions workflow in `.github/workflows/ci.yml`, which also runs the tests on every
