@@ -36,7 +36,8 @@ func startServer(t *testing.T, root, token string) (addr string, cancel func()) 
 		t.Fatal(err)
 	}
 	logger := log.New(io.Discard, "", 0)
-	srv := server.NewServer(jail, token, tools.Limits{MaxOutput: 1 << 20, Timeout: 10 * time.Second}, "", logger)
+	runner := tools.NewRunner(tools.Env{Jail: jail, Limits: tools.Limits{MaxOutput: 1 << 20, Timeout: 10 * time.Second}})
+	srv := server.NewServer(runner, token, logger)
 
 	ctx, stop := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -142,6 +143,16 @@ func TestRoundTrip(t *testing.T) {
 		}
 		if resp.OK || resp.Error != "unauthorized" {
 			t.Errorf("expected unauthorized, got OK=%v error=%q", resp.OK, resp.Error)
+		}
+	})
+
+	t.Run("client-only tool rejected over the wire", func(t *testing.T) {
+		resp, err := client.Call(addr, token, "help", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.OK {
+			t.Error("help has no server-side operation and should be rejected")
 		}
 	})
 }

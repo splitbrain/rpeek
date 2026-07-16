@@ -12,7 +12,7 @@ func TestToolRead(t *testing.T) {
 	env := testEnv(j)
 	path := filepath.Join(dir, "alpha.txt")
 
-	res, err := read{}.Run(ctx, env, mustRaw(t, readArgs{Path: path}))
+	res, err := read{}.Remote(ctx, env, mustRaw(t, readArgs{Path: path}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func TestToolRead(t *testing.T) {
 	}
 
 	// Offset paging.
-	res, err = read{}.Run(ctx, env, mustRaw(t, readArgs{Path: path, Offset: 4}))
+	res, err = read{}.Remote(ctx, env, mustRaw(t, readArgs{Path: path, Offset: 4}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestToolRead(t *testing.T) {
 	}
 
 	// Byte cap sets Truncated when more remains.
-	res, err = read{}.Run(ctx, env, mustRaw(t, readArgs{Path: path, MaxBytes: 3}))
+	res, err = read{}.Remote(ctx, env, mustRaw(t, readArgs{Path: path, MaxBytes: 3}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestToolRead(t *testing.T) {
 
 func TestToolReadRejectsDir(t *testing.T) {
 	j, dir := fixtureJail(t)
-	_, err := read{}.Run(context.Background(), testEnv(j), mustRaw(t, readArgs{Path: dir}))
+	_, err := read{}.Remote(context.Background(), testEnv(j), mustRaw(t, readArgs{Path: dir}))
 	if err == nil {
 		t.Error("reading a directory should error")
 	}
@@ -52,7 +52,7 @@ func TestToolReadRejectsDir(t *testing.T) {
 
 func TestToolReadEscape(t *testing.T) {
 	j, dir := fixtureJail(t)
-	_, err := read{}.Run(context.Background(), testEnv(j),
+	_, err := read{}.Remote(context.Background(), testEnv(j),
 		mustRaw(t, readArgs{Path: filepath.Join(dir, "..", "escape")}))
 	if err == nil {
 		t.Error("reading outside the jail should error")

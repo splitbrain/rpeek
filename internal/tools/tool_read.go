@@ -58,7 +58,7 @@ func (read) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 
 // Run reads the resolved file. The byte cap is enforced with an io.LimitReader so that
 // streaming pseudo-files cannot produce unbounded output.
-func (read) Run(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
+func (read) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	args, err := decodeArgs[readArgs](raw)
 	if err != nil {
 		return Result{}, err

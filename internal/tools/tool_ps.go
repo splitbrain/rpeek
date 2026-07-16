@@ -53,7 +53,7 @@ type psRow struct {
 }
 
 // Run returns a ps-style snapshot of running processes.
-func (ps) Run(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
+func (ps) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	if _, err := decodeArgs[psArgs](raw); err != nil {
 		return Result{}, err
 	}

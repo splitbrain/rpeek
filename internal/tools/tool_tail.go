@@ -57,7 +57,7 @@ func (tail) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 
 // Run returns the trailing lines of the resolved file, reading only the trailing window
 // so that huge files do not force unbounded work.
-func (tail) Run(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
+func (tail) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	args, err := decodeArgs[tailArgs](raw)
 	if err != nil {
 		return Result{}, err

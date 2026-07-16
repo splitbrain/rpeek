@@ -134,8 +134,13 @@ Exit codes: `0` success, `1` protocol/transport error, `2` server-returned error
 
 ## Tools (all READ-ONLY)
 
+Most tools run on the server and need a connection; `help` and `version` also run in the
+client (`help` never touches a server; `version` reports the server's build too when one
+is given).
+
 | Tool | Purpose | Notes |
 | --- | --- | --- |
+| `help` | List the tools, or one tool's usage | Client-only, no server needed; `help <tool>` details one. |
 | `hostname` | Server hostname | No args, no jail; cheapest connectivity and auth check. |
 | `version` | rpeek build version | No args, no jail; local build, plus the server's when connected. |
 | `list` | Directory listing, `ls -l` style | Skips dotfiles unless `--all`. |
@@ -171,20 +176,26 @@ server-side changes are needed; the skill just runs `rpeek <tool>` as a human wo
 ## Layout
 
 ```
-cmd/rpeek/          single binary: subcommand dispatch, serve, and tool client
-internal/tools/     the tools (one file each), the Tool registry, and the path jail
+cmd/rpeek/          single binary: subcommand dispatch and the tool client
+internal/tools/     every subcommand, the registry, the path jail, and the server Runner
 internal/protocol/  shared wire envelope (newline-delimited JSON)
 internal/tlsutil/   ad-hoc server cert + non-verifying client config
-internal/server/    accept loop, auth, dispatch to the tools registry
+internal/server/    accept loop, auth, request/response envelope; tool-agnostic
 internal/client/    dial + one request/response round trip
 internal/netutil/   shared address helpers (default port)
 skills/rpeek/       operator-side agent skill
 ```
 
-Each tool is a self-contained type in `internal/tools` that owns both faces of its
-operation: the client-side CLI flags that build its request, and the server-side
-execution that produces its output. Adding a tool is a new `tool_*.go` file plus one
-line in the registry.
+Each subcommand is a self-contained type in `internal/tools` carrying its flag parsing
+plus whichever execution halves it supports: `Local` (runs in the client), `Remote` (runs
+on the server), or `Serve` (the server process — only `serve`). `version` has both
+client-and-server halves; `help` is client-only; the diagnostic tools are server-only.
+Adding one is a new `tool_*.go` file plus one line in the registry.
+
+The server is agnostic to the tool set: it authenticates a request and hands it to a
+`ToolRunner` interface, which `internal/tools` supplies. That inversion is why `internal/
+tools` imports `internal/server` (so the `serve` tool can stand a server up) and not the
+reverse.
 
 A future "write tier" is deliberately out of scope. The `Tool` interface already carries
 a `ReadOnly` seam so write tools could be added and gated behind a flag without a

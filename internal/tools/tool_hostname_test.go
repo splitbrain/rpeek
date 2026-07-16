@@ -8,7 +8,7 @@ import (
 )
 
 func TestToolHostname(t *testing.T) {
-	res, err := hostname{}.Run(context.Background(), testEnv(nil), nil)
+	res, err := hostname{}.Remote(context.Background(), testEnv(nil), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

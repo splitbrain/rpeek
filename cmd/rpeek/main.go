@@ -27,11 +27,11 @@ func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
-// run dispatches on the subcommand: "serve" runs the server, "help" prints help, and
-// any registered tool name runs that tool as a client. The connection flags --host and
-// --token may precede the subcommand; they are parsed here and passed down as defaults
-// so a matching flag placed after the subcommand overrides them. It returns the process
-// exit code.
+// run dispatches on the subcommand. Every subcommand is a registered tool: a ServerMode
+// tool ("serve") runs the server via runServer, and every other tool runs as a client via
+// runTool. The connection flags --host and --token may precede the subcommand; they are
+// parsed here and passed down as defaults so a matching flag placed after the subcommand
+// overrides them. It returns the process exit code.
 func run(args []string) int {
 	// The flag package stops parsing at the first non-flag argument, which is the
 	// subcommand, so any leading --host/--token are consumed here and the rest is left
@@ -42,7 +42,7 @@ func run(args []string) int {
 	gToken := gfs.String("token", "", "auth token (or RPEEK_TOKEN)")
 	if err := gfs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			printGeneralHelp(os.Stdout)
+			fmt.Print(tools.GeneralHelp())
 			return exitOK
 		}
 		return usageErr("%v", err)
@@ -50,22 +50,18 @@ func run(args []string) int {
 
 	rest := gfs.Args()
 	if len(rest) == 0 {
-		printGeneralHelp(os.Stderr)
+		fmt.Fprint(os.Stderr, tools.GeneralHelp())
 		return exitUsage
 	}
 
-	switch rest[0] {
-	case "serve":
-		return runServe(rest[1:], *gHost, *gToken)
-	case "help":
-		return runHelp(rest[1:])
-	default:
-		tool, ok := tools.Lookup(rest[0])
-		if !ok {
-			return usageErr("unknown command %q (run 'rpeek help' for the list)", rest[0])
-		}
-		return runTool(tool, rest[1:], *gHost, *gToken)
+	tool, ok := tools.Lookup(rest[0])
+	if !ok {
+		return usageErr("unknown command %q (run 'rpeek help' for the list)", rest[0])
 	}
+	if sm, ok := tool.(tools.ServerMode); ok {
+		return runServer(sm, rest[1:], *gHost, *gToken)
+	}
+	return runTool(tool, rest[1:], *gHost, *gToken)
 }
 
 // hostToken applies the precedence flag > env for the client's server address and token

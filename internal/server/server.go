@@ -1,6 +1,7 @@
-// Package server implements the rpeek serve accept loop: the listener, per-connection
-// authentication, the request/response envelope, and dispatch to the tools registry.
-// The tools themselves and the path jail live in the tools package.
+// Package server implements the rpeek serve transport: the accept loop, per-connection
+// authentication, and the request/response envelope. It is agnostic to the tool set — it
+// hands each authenticated request to a ToolRunner and relays the result — so it imports
+// nothing from the tools package.
 package server
 
 import (
@@ -8,14 +9,12 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"sync"
 	"time"
 
 	"rpeek/internal/protocol"
-	"rpeek/internal/tools"
 )
 
 // connReadTimeout bounds how long a connected client has to send its request and
@@ -25,26 +24,28 @@ const connReadTimeout = 30 * time.Second
 // maxRequestLine bounds the size of a single request line the server will read.
 const maxRequestLine = 1 << 20
 
+// ToolRunner runs a named tool's server-side operation. It is the server's sole view of
+// the tool set: given a tool name and its raw arguments it returns the tool's text output
+// and truncation flag, or an error — unknown tool, no server-side operation, or a failure
+// from the tool itself. The tools package supplies the implementation; the error text is
+// relayed to the client verbatim.
+type ToolRunner interface {
+	RunRemote(ctx context.Context, name string, args json.RawMessage) (output string, truncated bool, err error)
+}
+
 // Server holds the runtime configuration for a rpeek serve instance.
 type Server struct {
-	// env carries the shared tool dependencies (jail, limits, journalctl path) reused
-	// for every request.
-	env tools.Env
+	// runner dispatches each request to the matching tool's server-side operation.
+	runner ToolRunner
 	// token is the shared secret every request must present.
 	token string
 	// logger writes one audit line per request to stderr.
 	logger *log.Logger
 }
 
-// NewServer builds a Server from the jail, token, limits, resolved journalctl path, and
-// logger, assembling the tools.Env reused for every request. An empty journalctlPath
-// makes the journal tool report a clean error at call time.
-func NewServer(jail *tools.JailSet, token string, limits tools.Limits, journalctlPath string, logger *log.Logger) *Server {
-	return &Server{
-		env:    tools.Env{Jail: jail, Limits: limits, Journalctl: journalctlPath},
-		token:  token,
-		logger: logger,
-	}
+// NewServer builds a Server from the tool runner, the shared auth token, and the logger.
+func NewServer(runner ToolRunner, token string, logger *log.Logger) *Server {
+	return &Server{runner: runner, token: token, logger: logger}
 }
 
 // Serve accepts connections on ln until ctx is cancelled, handling each in its own
@@ -76,8 +77,8 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	return nil
 }
 
-// handleConn reads one request, authenticates it, dispatches the tool under a timeout,
-// writes one response, and closes the connection.
+// handleConn reads one request, authenticates it, hands it to the runner, writes one
+// response, and closes the connection.
 func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	start := time.Now()
@@ -105,29 +106,15 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 		return
 	}
 
-	tool, ok := tools.Lookup(req.Tool)
-	if !ok {
-		s.writeResponse(conn, protocol.Response{OK: false, Error: fmt.Sprintf("unknown tool: %q", req.Tool)})
-		s.logRequest(remote, req.Tool, false, time.Since(start), 0)
-		return
-	}
-
-	// ReadOnly seam: every tool is read-only today, so no gating is applied. A future
-	// --allow-write flag would reject a non-read-only tool here.
-	_ = tool.ReadOnly()
-
-	tctx, cancel := context.WithTimeout(ctx, s.env.Limits.Timeout)
-	defer cancel()
-
-	res, err := tool.Run(tctx, s.env, req.Args)
+	output, truncated, err := s.runner.RunRemote(ctx, req.Tool, req.Args)
 	var resp protocol.Response
 	if err != nil {
 		resp = protocol.Response{OK: false, Error: err.Error()}
 	} else {
-		resp = protocol.Response{OK: true, Output: res.Output, Truncated: res.Truncated}
+		resp = protocol.Response{OK: true, Output: output, Truncated: truncated}
 	}
 	s.writeResponse(conn, resp)
-	s.logRequest(remote, req.Tool, err == nil, time.Since(start), len(res.Output))
+	s.logRequest(remote, req.Tool, err == nil, time.Since(start), len(output))
 }
 
 // writeResponse marshals resp, appends a newline, and writes it under a deadline.

@@ -7,7 +7,7 @@ import (
 )
 
 func TestToolPS(t *testing.T) {
-	res, err := ps{}.Run(context.Background(), testEnv(nil), nil)
+	res, err := ps{}.Remote(context.Background(), testEnv(nil), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

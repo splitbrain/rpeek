@@ -39,13 +39,14 @@ func (versionTool) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 	}
 }
 
-// Local returns the calling binary's build version followed by a newline.
-func (versionTool) Local() (Result, error) {
-	return Result{Output: version.Version + "\n"}, nil
+// Local returns the client binary's build version. It is the same computation as Remote,
+// just run in this process, so it reads this binary's version rather than the server's.
+func (v versionTool) Local(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
+	return v.Remote(ctx, env, raw)
 }
 
-// Run returns the server binary's build version followed by a newline.
-func (versionTool) Run(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
+// Remote returns the server binary's build version followed by a newline.
+func (versionTool) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	if _, err := decodeArgs[versionArgs](raw); err != nil {
 		return Result{}, err
 	}

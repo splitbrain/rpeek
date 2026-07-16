@@ -9,7 +9,7 @@ import (
 
 func TestToolGrepFile(t *testing.T) {
 	j, dir := fixtureJail(t)
-	res, err := grep{}.Run(context.Background(), testEnv(j),
+	res, err := grep{}.Remote(context.Background(), testEnv(j),
 		mustRaw(t, grepArgs{Path: filepath.Join(dir, "beta.log"), Pattern: "ERROR"}))
 	if err != nil {
 		t.Fatal(err)
@@ -25,7 +25,7 @@ func TestToolGrepFile(t *testing.T) {
 
 func TestToolGrepIgnoreCase(t *testing.T) {
 	j, dir := fixtureJail(t)
-	res, err := grep{}.Run(context.Background(), testEnv(j),
+	res, err := grep{}.Remote(context.Background(), testEnv(j),
 		mustRaw(t, grepArgs{Path: filepath.Join(dir, "beta.log"), Pattern: "error", IgnoreCase: true}))
 	if err != nil {
 		t.Fatal(err)
@@ -38,7 +38,7 @@ func TestToolGrepIgnoreCase(t *testing.T) {
 
 func TestToolGrepDirRecursive(t *testing.T) {
 	j, dir := fixtureJail(t)
-	res, err := grep{}.Run(context.Background(), testEnv(j),
+	res, err := grep{}.Remote(context.Background(), testEnv(j),
 		mustRaw(t, grepArgs{Path: dir, Pattern: "ERROR"}))
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestToolGrepDirRecursive(t *testing.T) {
 
 func TestToolGrepCap(t *testing.T) {
 	j, dir := fixtureJail(t)
-	res, err := grep{}.Run(context.Background(), testEnv(j),
+	res, err := grep{}.Remote(context.Background(), testEnv(j),
 		mustRaw(t, grepArgs{Path: dir, Pattern: "ERROR", MaxMatches: 1}))
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func TestToolGrepCap(t *testing.T) {
 
 func TestToolGrepBadPattern(t *testing.T) {
 	j, dir := fixtureJail(t)
-	_, err := grep{}.Run(context.Background(), testEnv(j),
+	_, err := grep{}.Remote(context.Background(), testEnv(j),
 		mustRaw(t, grepArgs{Path: dir, Pattern: "("}))
 	if err == nil {
 		t.Error("invalid regexp should error")

@@ -9,7 +9,7 @@ import (
 
 func TestToolStat(t *testing.T) {
 	j, dir := fixtureJail(t)
-	res, err := stat{}.Run(context.Background(), testEnv(j),
+	res, err := stat{}.Remote(context.Background(), testEnv(j),
 		mustRaw(t, statArgs{Path: filepath.Join(dir, "alpha.txt")}))
 	if err != nil {
 		t.Fatal(err)

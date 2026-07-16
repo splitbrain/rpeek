@@ -8,7 +8,7 @@ import (
 
 func TestToolTail(t *testing.T) {
 	j, dir := fixtureJail(t)
-	res, err := tail{}.Run(context.Background(), testEnv(j),
+	res, err := tail{}.Remote(context.Background(), testEnv(j),
 		mustRaw(t, tailArgs{Path: filepath.Join(dir, "beta.log"), Lines: 2}))
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +20,7 @@ func TestToolTail(t *testing.T) {
 
 func TestToolTailMoreThanFile(t *testing.T) {
 	j, dir := fixtureJail(t)
-	res, err := tail{}.Run(context.Background(), testEnv(j),
+	res, err := tail{}.Remote(context.Background(), testEnv(j),
 		mustRaw(t, tailArgs{Path: filepath.Join(dir, "alpha.txt"), Lines: 100}))
 	if err != nil {
 		t.Fatal(err)

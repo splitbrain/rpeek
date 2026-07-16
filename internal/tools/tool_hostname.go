@@ -37,7 +37,7 @@ func (hostname) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 }
 
 // Run returns the server's hostname followed by a newline.
-func (hostname) Run(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
+func (hostname) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	if _, err := decodeArgs[hostnameArgs](raw); err != nil {
 		return Result{}, err
 	}

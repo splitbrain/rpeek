@@ -7,7 +7,7 @@ import (
 )
 
 func TestToolDisk(t *testing.T) {
-	res, err := disk{}.Run(context.Background(), testEnv(nil), nil)
+	res, err := disk{}.Remote(context.Background(), testEnv(nil), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

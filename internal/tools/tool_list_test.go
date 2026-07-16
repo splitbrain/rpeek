@@ -12,7 +12,7 @@ func TestToolList(t *testing.T) {
 	ctx := context.Background()
 	env := testEnv(j)
 
-	res, err := list{}.Run(ctx, env, mustRaw(t, listArgs{Path: dir}))
+	res, err := list{}.Remote(ctx, env, mustRaw(t, listArgs{Path: dir}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +23,7 @@ func TestToolList(t *testing.T) {
 		t.Errorf("list should skip dotfiles by default:\n%s", res.Output)
 	}
 
-	resAll, err := list{}.Run(ctx, env, mustRaw(t, listArgs{Path: dir, All: true}))
+	resAll, err := list{}.Remote(ctx, env, mustRaw(t, listArgs{Path: dir, All: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestToolList(t *testing.T) {
 
 func TestToolListRejectsFile(t *testing.T) {
 	j, dir := fixtureJail(t)
-	_, err := list{}.Run(context.Background(), testEnv(j), mustRaw(t, listArgs{Path: filepath.Join(dir, "alpha.txt")}))
+	_, err := list{}.Remote(context.Background(), testEnv(j), mustRaw(t, listArgs{Path: filepath.Join(dir, "alpha.txt")}))
 	if err == nil {
 		t.Error("listing a file should error")
 	}

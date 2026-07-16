@@ -9,10 +9,12 @@ import (
 )
 
 func TestVersionTool(t *testing.T) {
-	// versionTool must satisfy LocalTool so the client can answer without a server.
+	// versionTool implements both halves so the client can answer without a server and
+	// the server can answer over the wire.
 	var lt LocalTool = versionTool{}
+	var rt RemoteTool = versionTool{}
 
-	local, err := lt.Local()
+	local, err := lt.Local(context.Background(), testEnv(nil), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,11 +25,11 @@ func TestVersionTool(t *testing.T) {
 		t.Errorf("Local() output should end with a newline: %q", local.Output)
 	}
 
-	run, err := versionTool{}.Run(context.Background(), testEnv(nil), nil)
+	remote, err := rt.Remote(context.Background(), testEnv(nil), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.TrimSpace(run.Output); got != version.Version {
-		t.Errorf("Run() = %q, want %q", got, version.Version)
+	if got := strings.TrimSpace(remote.Output); got != version.Version {
+		t.Errorf("Remote() = %q, want %q", got, version.Version)
 	}
 }

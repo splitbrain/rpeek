@@ -52,7 +52,7 @@ func (disk) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 }
 
 // Run returns a df-style table of filesystem usage.
-func (disk) Run(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
+func (disk) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	if _, err := decodeArgs[diskArgs](raw); err != nil {
 		return Result{}, err
 	}

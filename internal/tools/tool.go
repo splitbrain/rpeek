@@ -1,7 +1,8 @@
-// Package tools defines the read-only diagnostic tools shared by the rpeek server and
-// the rpeek client. Each tool is a self-contained type that owns both faces of its
-// operation: the client-side CLI flags that build its wire arguments, and the
-// server-side execution that produces its output.
+// Package tools defines the rpeek subcommands: the read-only diagnostic tools plus the
+// serve tool that stands up the server. Each is a self-contained type carrying its flag
+// parsing and whichever execution halves it supports — Local (in the client), Remote (on
+// the server), or Serve (the server process). The package supplies the Runner the server
+// dispatches through, so it imports the server package rather than the reverse.
 package tools
 
 import (
@@ -9,12 +10,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"time"
 )
 
-// Tool is one read-only diagnostic operation. A single implementation owns both faces:
-// the client-side flag parsing that builds its wire arguments and the server-side
-// execution that produces its output. Concrete tools are registered in All.
+// Tool is one read-only diagnostic operation's identity and argument parsing. Execution
+// is a separate concern: a tool runs on the server if it implements RemoteTool, in the
+// client if it implements LocalTool, and both if it implements both. Every tool
+// implements at least one. Concrete tools are registered in All.
 type Tool interface {
 	// Name returns the subcommand name, e.g. "grep".
 	Name() string
@@ -29,31 +32,50 @@ type Tool interface {
 	// today; the method is a seam a future --allow-write flag can gate write tools on.
 	ReadOnly() bool
 
-	// NewFlags is the client face: it returns a fresh flag set plus a builder that turns
-	// the parsed positional arguments into this tool's wire argument value. The returned
-	// value is marshalled to JSON and carried in the request.
+	// NewFlags returns a fresh flag set plus a builder that turns the parsed positional
+	// arguments into this tool's wire argument value. The returned value is marshalled to
+	// JSON and passed to Local or carried in the request to Remote.
 	NewFlags() (*flag.FlagSet, func(pos []string) (any, error))
-
-	// Run is the server face: it decodes the raw wire arguments, executes the tool under
-	// the context and environment, and returns the result.
-	Run(ctx context.Context, env Env, raw json.RawMessage) (Result, error)
 }
 
-// LocalTool is an optional capability a Tool implements when it can also produce its
-// result in the client process, without contacting a server. The client runs Local for
-// the local answer and, when a server is addressed, additionally calls Run over the wire
-// for the remote one. Only tools reporting the binary's own identity should implement it;
-// a host-state tool run locally would silently inspect the operator's machine instead of
-// the target host, so those must remain server-only.
+// RemoteTool is a Tool that executes on the server, reached over the wire. Most tools
+// implement it: they read host state the client cannot see. The server decodes the raw
+// wire arguments, runs Remote under the request context and environment, and returns the
+// result to the client.
+type RemoteTool interface {
+	Tool
+
+	// Remote executes the tool on the server and returns its result.
+	Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error)
+}
+
+// LocalTool is a Tool that executes in the client process, with the same signature as
+// RemoteTool.Remote. A tool implements it when it can answer without a server — either
+// because the answer is the client binary's own (version) or purely static (help). Tools
+// that read host state must not implement it: run locally they would silently inspect the
+// operator's own machine instead of the target host.
 type LocalTool interface {
 	Tool
 
-	// Local produces the tool's result in the calling process, using no server, jail, or
-	// arguments.
-	Local() (Result, error)
+	// Local executes the tool in the calling process and returns its result. The Env it
+	// receives is client-supplied; it carries no jail.
+	Local(ctx context.Context, env Env, raw json.RawMessage) (Result, error)
 }
 
-// Env carries the server-side dependencies a tool may draw on. A tool ignores the
+// ServerMode is a Tool whose execution is the server process itself, rather than a
+// one-shot Local/Remote result. Only serve implements it: it builds the jail and TLS
+// listener from its arguments, prints a banner to stdout, and serves until ctx is
+// cancelled. It is neither a LocalTool nor a RemoteTool.
+type ServerMode interface {
+	Tool
+
+	// Serve runs the server until ctx is cancelled, decoding raw for its configuration
+	// (bind address, token, roots, limits) and writing its startup banner to stdout.
+	Serve(ctx context.Context, raw json.RawMessage, stdout io.Writer) error
+}
+
+// Env carries the dependencies a tool may draw on when it executes. On the server it is
+// fully populated; a client-supplied Env for Local carries no jail. A tool ignores the
 // fields it does not need.
 type Env struct {
 	// Jail is the set of roots that file-addressing tools may read within.
@@ -66,9 +88,9 @@ type Env struct {
 	Journalctl string
 }
 
-// Result is the non-error outcome of Run.
+// Result is the non-error outcome of a tool's execution.
 type Result struct {
-	// Output is the tool's text result, already formatted server-side.
+	// Output is the tool's text result, already formatted.
 	Output string
 
 	// Truncated reports whether the output was capped by a size, match, or entry limit.

@@ -44,7 +44,7 @@ func (stat) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 
 // Run reports metadata for the resolved path. Because the jail resolves symlinks, the
 // reported metadata is that of the resolved target.
-func (stat) Run(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
+func (stat) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	args, err := decodeArgs[statArgs](raw)
 	if err != nil {
 		return Result{}, err

@@ -61,7 +61,7 @@ func (journal) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 
 // Run returns recent journal lines. It never constructs a shell command string; the
 // argument vector is always passed as discrete arguments.
-func (journal) Run(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
+func (journal) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	args, err := decodeArgs[journalArgs](raw)
 	if err != nil {
 		return Result{}, err
