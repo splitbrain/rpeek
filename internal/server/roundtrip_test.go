@@ -12,16 +12,16 @@ import (
 	"time"
 
 	"diag/internal/client"
-	"diag/internal/protocol"
 	"diag/internal/server"
 	"diag/internal/tlsutil"
+	"diag/internal/tools"
 )
 
 // startServer spins up a diagd on an ephemeral loopback port with the given jail root
 // and token, returning its address and a cancel function.
 func startServer(t *testing.T, root, token string) (addr string, cancel func()) {
 	t.Helper()
-	jail, err := server.NewJailSet([]string{root})
+	jail, err := tools.NewJailSet([]string{root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func startServer(t *testing.T, root, token string) (addr string, cancel func()) 
 		t.Fatal(err)
 	}
 	logger := log.New(io.Discard, "", 0)
-	srv := server.NewServer(jail, token, server.Limits{MaxOutput: 1 << 20, Timeout: 10 * time.Second}, logger)
+	srv := server.NewServer(jail, token, tools.Limits{MaxOutput: 1 << 20, Timeout: 10 * time.Second}, "", logger)
 
 	ctx, stop := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -58,7 +58,7 @@ func TestRoundTrip(t *testing.T) {
 	defer cancel()
 
 	t.Run("good token and valid tool", func(t *testing.T) {
-		resp, err := client.Call(addr, token, "read", protocol.ReadArgs{Path: filepath.Join(root, "hello.txt")})
+		resp, err := client.Call(addr, token, "read", map[string]string{"path": filepath.Join(root, "hello.txt")})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -71,7 +71,7 @@ func TestRoundTrip(t *testing.T) {
 	})
 
 	t.Run("bad token", func(t *testing.T) {
-		resp, err := client.Call(addr, "wrong", "read", protocol.ReadArgs{Path: filepath.Join(root, "hello.txt")})
+		resp, err := client.Call(addr, "wrong", "read", map[string]string{"path": filepath.Join(root, "hello.txt")})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -101,7 +101,7 @@ func TestRoundTrip(t *testing.T) {
 	})
 
 	t.Run("path escape", func(t *testing.T) {
-		resp, err := client.Call(addr, token, "read", protocol.ReadArgs{Path: "/etc/passwd"})
+		resp, err := client.Call(addr, token, "read", map[string]string{"path": "/etc/passwd"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -111,7 +111,7 @@ func TestRoundTrip(t *testing.T) {
 	})
 
 	t.Run("ps over the wire", func(t *testing.T) {
-		resp, err := client.Call(addr, token, "ps", protocol.PSArgs{})
+		resp, err := client.Call(addr, token, "ps", nil)
 		if err != nil {
 			t.Fatal(err)
 		}

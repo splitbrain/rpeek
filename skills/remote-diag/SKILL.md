@@ -1,56 +1,57 @@
 ---
 name: remote-diag
 description: >
-  Inspect a remote host that is running the read-only `diagd` diagnostic server.
+  Inspect a remote host that is running the read-only `diag serve` diagnostic server.
   Use when the user wants to read logs, configs, process state, disk usage, or
-  journald on a remote machine reachable via `diagctl` — e.g. "check why nginx is
-  down on 10.0.0.5", "tail the app log on the prod box", "what's eating disk there".
+  journald on a remote machine reachable via the `diag` client — e.g. "check why nginx
+  is down on 10.0.0.5", "tail the app log on the prod box", "what's eating disk there".
   Do NOT use for the local machine (use normal shell tools) or for anything that
   writes/mutates — this server is read-only by design.
 ---
 
-# Remote diagnostics via diagctl
+# Remote diagnostics via diag
 
 ## Preconditions
-- `diagctl` is on PATH.
+- `diag` is on PATH.
 - Connection details are in the environment: `DIAG_HOST` (host, or host:port — the
   port defaults to 7017) and `DIAG_TOKEN`. If either is missing, ask the user for it
   — never guess a host or fabricate a token.
-- Confirm reachability with a cheap call (`diagctl disk`) before a long investigation.
+- Confirm reachability with a cheap call (`diag disk`) before a long investigation.
 
 ## Discovering the tools
 The toolset is self-describing — do not rely on a hardcoded list, since it can change
 between versions:
-- `diagctl help` — lists the available tools, each with a one-line summary.
-- `diagctl help <tool>` (or `diagctl <tool> --help`) — prints that tool's arguments and
+- `diag help` — lists the available tools, each with a one-line summary.
+- `diag help <tool>` (or `diag <tool> --help`) — prints that tool's arguments and
   flags with their defaults and meanings.
 
-Run `diagctl help` first whenever you are unsure what is available or what a tool
+Run `diag help` first whenever you are unsure what is available or what a tool
 accepts; it is the authoritative reference. Every tool is READ-ONLY, and `help` needs no
 host or token.
 
 ## How to use
-Every invocation is one-shot: `diagctl <tool> [args]`. For path-taking tools the path
-and any flags may appear in any order (`diagctl read /p --max-bytes 200` and
-`diagctl read --max-bytes 200 /p` are equivalent). Read `stdout` as if it were the output
-of the equivalent Unix command; it is already formatted server-side. On a non-zero exit,
-read `stderr` and adapt — do not retry the identical command.
+Every invocation is one-shot: `diag <tool> [args]`. Connection flags (`--host`/`--token`)
+may go before or after the tool name, and a tool's own flags and its path may appear in
+any order (`diag read /p --max-bytes 200` and `diag read --max-bytes 200 /p` are
+equivalent). Read `stdout` as if it were the output of the equivalent Unix command; it is
+already formatted server-side. On a non-zero exit, read `stderr` and adapt — do not retry
+the identical command.
 
-Representative calls (see `diagctl help <tool>` for each tool's full argument set):
+Representative calls (see `diag help <tool>` for each tool's full argument set):
 
 ```
-diagctl list /var/log
-diagctl read /etc/nginx/nginx.conf --max-bytes 20000
-diagctl grep /var/log --pattern "ERROR" --ignore-case
-diagctl tail /var/log/nginx/error.log --lines 200
-diagctl stat /etc/hosts
-diagctl ps
-diagctl disk
-diagctl journal --unit nginx --lines 100
+diag list /var/log
+diag read /etc/nginx/nginx.conf --max-bytes 20000
+diag grep /var/log --pattern "ERROR" --ignore-case
+diag tail /var/log/nginx/error.log --lines 200
+diag stat /etc/hosts
+diag ps
+diag disk
+diag journal --unit nginx --lines 100
 ```
 
 ## Rules
-- Use only the tools `diagctl help` reports. Do not invent flags or tools; there is no
+- Use only the tools `diag help` reports. Do not invent flags or tools; there is no
   write, delete, restart, or "run command" capability, by design.
 - Paths are the host's **real** paths and must fall inside a jail root the operator
   granted. A "not within any allowed root" error means the directory was not granted
@@ -82,9 +83,9 @@ is wrong — stop and ask the user; do not brute-force.
 Example (user: "nginx is down on the prod box, why?"):
 
 ```
-diagctl ps                                  # is nginx running? -> not in the table
-diagctl journal --unit nginx --lines 50     # why did it stop? -> "bind() to :443 failed"
-diagctl grep /etc/nginx --pattern "listen"  # what claims 443? -> two server blocks
-diagctl disk                                 # rule out a full disk -> plenty free
+diag ps                                  # is nginx running? -> not in the table
+diag journal --unit nginx --lines 50     # why did it stop? -> "bind() to :443 failed"
+diag grep /etc/nginx --pattern "listen"  # what claims 443? -> two server blocks
+diag disk                                # rule out a full disk -> plenty free
 # -> report: duplicate `listen 443` in <file:line>; nginx aborts on bind conflict.
 ```

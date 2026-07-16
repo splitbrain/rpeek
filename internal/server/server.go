@@ -1,5 +1,6 @@
-// Package server implements the diagd read-only diagnostic server: the accept loop,
-// per-connection authentication and dispatch, the path jail, and the tools.
+// Package server implements the diag serve accept loop: the listener, per-connection
+// authentication, the request/response envelope, and dispatch to the tools registry.
+// The tools themselves and the path jail live in the tools package.
 package server
 
 import (
@@ -10,11 +11,11 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os/exec"
 	"sync"
 	"time"
 
 	"diag/internal/protocol"
+	"diag/internal/tools"
 )
 
 // connReadTimeout bounds how long a connected client has to send its request and
@@ -24,117 +25,26 @@ const connReadTimeout = 30 * time.Second
 // maxRequestLine bounds the size of a single request line the server will read.
 const maxRequestLine = 1 << 20
 
-// Server holds the runtime configuration for a diagd instance.
+// Server holds the runtime configuration for a diag serve instance.
 type Server struct {
-	// jail is the set of roots that file-addressing tools may read within.
-	jail *JailSet
+	// env carries the shared tool dependencies (jail, limits, journalctl path) reused
+	// for every request.
+	env tools.Env
 	// token is the shared secret every request must present.
 	token string
-	// limits bounds tool output size and run time.
-	limits Limits
-	// journalctlPath is the resolved path to journalctl, or "" if unavailable.
-	journalctlPath string
 	// logger writes one audit line per request to stderr.
 	logger *log.Logger
 }
 
-// NewServer builds a Server. It resolves journalctl once at construction; if it is not
-// present the journal tool reports a clean error at call time.
-func NewServer(jail *JailSet, token string, limits Limits, logger *log.Logger) *Server {
-	path, _ := exec.LookPath("journalctl")
+// NewServer builds a Server from the jail, token, limits, resolved journalctl path, and
+// logger, assembling the tools.Env reused for every request. An empty journalctlPath
+// makes the journal tool report a clean error at call time.
+func NewServer(jail *tools.JailSet, token string, limits tools.Limits, journalctlPath string, logger *log.Logger) *Server {
 	return &Server{
-		jail:           jail,
-		token:          token,
-		limits:         limits,
-		journalctlPath: path,
-		logger:         logger,
+		env:    tools.Env{Jail: jail, Limits: limits, Journalctl: journalctlPath},
+		token:  token,
+		logger: logger,
 	}
-}
-
-// dispatchEntry describes one dispatchable tool.
-type dispatchEntry struct {
-	// ReadOnly marks the tool as non-mutating. Every MVP tool is read-only; the field
-	// is a seam so a future --allow-write flag can gate write tools without a rewrite.
-	ReadOnly bool
-	// run decodes the raw arguments and executes the tool, returning its text output,
-	// whether the output was truncated, and any error.
-	run func(ctx context.Context, s *Server, raw json.RawMessage) (string, bool, error)
-}
-
-// decodeArgs unmarshals raw tool arguments into a value of type T. Empty raw arguments
-// yield the zero value of T.
-func decodeArgs[T any](raw json.RawMessage) (T, error) {
-	var v T
-	if len(raw) == 0 {
-		return v, nil
-	}
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return v, fmt.Errorf("invalid arguments: %w", err)
-	}
-	return v, nil
-}
-
-// dispatch maps a tool name to its handler. Adding a tool is a single new entry.
-var dispatch = map[string]dispatchEntry{
-	"list": {ReadOnly: true, run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, bool, error) {
-		args, err := decodeArgs[protocol.ListArgs](raw)
-		if err != nil {
-			return "", false, err
-		}
-		return toolList(ctx, s.jail, s.limits, args)
-	}},
-	"read": {ReadOnly: true, run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, bool, error) {
-		args, err := decodeArgs[protocol.ReadArgs](raw)
-		if err != nil {
-			return "", false, err
-		}
-		return toolRead(ctx, s.jail, s.limits, args)
-	}},
-	"grep": {ReadOnly: true, run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, bool, error) {
-		args, err := decodeArgs[protocol.GrepArgs](raw)
-		if err != nil {
-			return "", false, err
-		}
-		return toolGrep(ctx, s.jail, s.limits, args)
-	}},
-	"tail": {ReadOnly: true, run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, bool, error) {
-		args, err := decodeArgs[protocol.TailArgs](raw)
-		if err != nil {
-			return "", false, err
-		}
-		return toolTail(ctx, s.jail, s.limits, args)
-	}},
-	"stat": {ReadOnly: true, run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, bool, error) {
-		args, err := decodeArgs[protocol.StatArgs](raw)
-		if err != nil {
-			return "", false, err
-		}
-		return toolStat(ctx, s.jail, s.limits, args)
-	}},
-	"ps": {ReadOnly: true, run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, bool, error) {
-		if _, err := decodeArgs[protocol.PSArgs](raw); err != nil {
-			return "", false, err
-		}
-		return toolPS(ctx, s.limits)
-	}},
-	"disk": {ReadOnly: true, run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, bool, error) {
-		if _, err := decodeArgs[protocol.DiskArgs](raw); err != nil {
-			return "", false, err
-		}
-		return toolDisk(ctx, s.limits)
-	}},
-	"journal": {ReadOnly: true, run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, bool, error) {
-		args, err := decodeArgs[protocol.JournalArgs](raw)
-		if err != nil {
-			return "", false, err
-		}
-		return toolJournal(ctx, s.limits, s.journalctlPath, args)
-	}},
-}
-
-// ToolNames returns the dispatchable tool names in a fixed display order.
-func ToolNames() []string {
-	return []string{"list", "read", "grep", "tail", "stat", "ps", "disk", "journal"}
 }
 
 // Serve accepts connections on ln until ctx is cancelled, handling each in its own
@@ -195,25 +105,29 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 		return
 	}
 
-	entry, ok := dispatch[req.Tool]
+	tool, ok := tools.Lookup(req.Tool)
 	if !ok {
 		s.writeResponse(conn, protocol.Response{OK: false, Error: fmt.Sprintf("unknown tool: %q", req.Tool)})
 		s.logRequest(remote, req.Tool, false, time.Since(start), 0)
 		return
 	}
 
-	tctx, cancel := context.WithTimeout(ctx, s.limits.Timeout)
+	// ReadOnly seam: every tool is read-only today, so no gating is applied. A future
+	// --allow-write flag would reject a non-read-only tool here.
+	_ = tool.ReadOnly()
+
+	tctx, cancel := context.WithTimeout(ctx, s.env.Limits.Timeout)
 	defer cancel()
 
-	output, truncated, err := entry.run(tctx, s, req.Args)
+	res, err := tool.Run(tctx, s.env, req.Args)
 	var resp protocol.Response
 	if err != nil {
 		resp = protocol.Response{OK: false, Error: err.Error()}
 	} else {
-		resp = protocol.Response{OK: true, Output: output, Truncated: truncated}
+		resp = protocol.Response{OK: true, Output: res.Output, Truncated: res.Truncated}
 	}
 	s.writeResponse(conn, resp)
-	s.logRequest(remote, req.Tool, err == nil, time.Since(start), len(output))
+	s.logRequest(remote, req.Tool, err == nil, time.Since(start), len(res.Output))
 }
 
 // writeResponse marshals resp, appends a newline, and writes it under a deadline.
