@@ -45,6 +45,10 @@ Stamp a version into the binary (release builds do this automatically) with the 
 go build -ldflags "-s -w -X rpeek/internal/version.Version=v1.2.3" -o rpeek ./cmd/rpeek
 ```
 
+Tagged releases (`vX.Y.Z`) are built for Linux and macOS on `amd64` and `arm64` by the
+GitHub Actions workflow in `.github/workflows/ci.yml`, which also runs the tests on every
+push and pull request.
+
 No third-party dependencies — standard library only.
 
 ## Run the server
