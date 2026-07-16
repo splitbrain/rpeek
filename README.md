@@ -114,6 +114,7 @@ Exit codes: `0` success, `1` protocol/transport error, `2` server-returned error
 
 | Tool | Purpose | Notes |
 | --- | --- | --- |
+| `hostname` | Server hostname | No args, no jail; cheapest connectivity and auth check. |
 | `list` | Directory listing, `ls -l` style | Skips dotfiles unless `--all`. |
 | `read` | File contents, byte-capped | `--max-bytes`, `--offset`; regular files only. |
 | `grep` | RE2 search of a file or directory tree | `--pattern`, `--ignore-case`, `--max-matches`. |
