@@ -38,6 +38,13 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o rpeek ./cmd/rpeek
 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o rpeek ./cmd/rpeek
 ```
 
+Stamp a version into the binary (release builds do this automatically) with the linker's
+`-X` flag; unstamped builds report `dev`:
+
+```sh
+go build -ldflags "-s -w -X rpeek/internal/version.Version=v1.2.3" -o rpeek ./cmd/rpeek
+```
+
 No third-party dependencies — standard library only.
 
 ## Run the server
@@ -104,8 +111,19 @@ rpeek disk
 rpeek journal --unit nginx --lines 100
 ```
 
+`rpeek version` prints the local build version. Given both `--host` and `--token` (or
+`RPEEK_HOST` / `RPEEK_TOKEN`) it also queries the server and prints its version alongside
+the local one — a quick way to confirm which build is deployed on a host:
+
+```sh
+rpeek version                                        # local build only
+rpeek --host 10.0.0.5 --token 9f2a5c1e... version    # local + remote
+```
+
 The client does no formatting: the server produces CLI-style text and the client relays
-`stdout` verbatim. If output was capped, `... (truncated)` is written to `stderr`.
+`stdout` verbatim. The one exception is `version`, which labels the local and remote
+builds when it prints both. If output was capped, `... (truncated)` is written to
+`stderr`.
 
 Exit codes: `0` success, `1` protocol/transport error, `2` server-returned error,
 `3` usage error.
@@ -115,6 +133,7 @@ Exit codes: `0` success, `1` protocol/transport error, `2` server-returned error
 | Tool | Purpose | Notes |
 | --- | --- | --- |
 | `hostname` | Server hostname | No args, no jail; cheapest connectivity and auth check. |
+| `version` | rpeek build version | No args, no jail; local build, plus the server's when connected. |
 | `list` | Directory listing, `ls -l` style | Skips dotfiles unless `--all`. |
 | `read` | File contents, byte-capped | `--max-bytes`, `--offset`; regular files only. |
 | `grep` | RE2 search of a file or directory tree | `--pattern`, `--ignore-case`, `--max-matches`. |

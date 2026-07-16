@@ -21,6 +21,7 @@ import (
 	"rpeek/internal/server"
 	"rpeek/internal/tlsutil"
 	"rpeek/internal/tools"
+	"rpeek/internal/version"
 )
 
 // defaultBindHost is the bind address serve uses when neither --host nor RPEEK_HOST is
@@ -134,7 +135,7 @@ func printBanner(w io.Writer, listen string, roots []string, token string, ttl t
 	if ttl > 0 {
 		ttlLine = fmt.Sprintf("%s (shuts down ~%s)", ttl, time.Now().Add(ttl).Format("15:04"))
 	}
-	fmt.Fprintln(w, "rpeek serve — read-only diagnostic server")
+	fmt.Fprintf(w, "rpeek %s serve — read-only diagnostic server\n", version.Version)
 	fmt.Fprintf(w, "listen : %s\n", listen)
 	fmt.Fprintf(w, "jails  : %s   (file tools may read within these)\n", strings.Join(roots, ", "))
 	fmt.Fprintf(w, "token  : %s   (pass to the client via --token or RPEEK_TOKEN)\n", token)

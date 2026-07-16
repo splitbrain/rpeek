@@ -68,10 +68,11 @@ func run(args []string) int {
 	}
 }
 
-// resolveHostToken applies the precedence flag > env for the client's server address
-// and token, normalizes the address, and returns the resolved values. On a missing or
-// invalid setting it prints a usage error and returns a non-OK exit code in code.
-func resolveHostToken(hostFlag, tokenFlag string) (host, token string, code int) {
+// hostToken applies the precedence flag > env for the client's server address and token
+// and returns them unvalidated, either possibly empty. It is the raw resolution that
+// resolveHostToken validates and that a LocalTool uses to decide whether a server was
+// addressed at all.
+func hostToken(hostFlag, tokenFlag string) (host, token string) {
 	host = hostFlag
 	if host == "" {
 		host = os.Getenv("RPEEK_HOST")
@@ -80,6 +81,14 @@ func resolveHostToken(hostFlag, tokenFlag string) (host, token string, code int)
 	if token == "" {
 		token = os.Getenv("RPEEK_TOKEN")
 	}
+	return host, token
+}
+
+// resolveHostToken applies the precedence flag > env for the client's server address
+// and token, normalizes the address, and returns the resolved values. On a missing or
+// invalid setting it prints a usage error and returns a non-OK exit code in code.
+func resolveHostToken(hostFlag, tokenFlag string) (host, token string, code int) {
+	host, token = hostToken(hostFlag, tokenFlag)
 	if host == "" {
 		return "", "", usageErr("no server address: set --host or RPEEK_HOST")
 	}

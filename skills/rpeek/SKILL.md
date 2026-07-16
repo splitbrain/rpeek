@@ -55,6 +55,7 @@ each tool's full argument set):
 
 ```
 rpeek hostname
+rpeek version
 rpeek list /var/log
 rpeek read /etc/nginx/nginx.conf --max-bytes 20000
 rpeek grep /var/log --pattern "ERROR" --ignore-case

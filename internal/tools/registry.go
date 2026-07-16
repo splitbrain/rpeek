@@ -5,7 +5,7 @@ package tools
 // the full tool set greppable in one place and gives a deterministic order for help
 // output and the serve banner.
 var All = []Tool{
-	hostname{}, list{}, read{}, grep{}, tail{}, stat{}, ps{}, disk{}, journal{},
+	hostname{}, versionTool{}, list{}, read{}, grep{}, tail{}, stat{}, ps{}, disk{}, journal{},
 }
 
 // byName indexes All by tool name, built once at package initialization.

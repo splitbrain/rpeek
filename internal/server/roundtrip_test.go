@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"rpeek/internal/server"
 	"rpeek/internal/tlsutil"
 	"rpeek/internal/tools"
+	"rpeek/internal/version"
 )
 
 // startServer spins up an rpeek server on an ephemeral loopback port with the given jail root
@@ -117,6 +119,29 @@ func TestRoundTrip(t *testing.T) {
 		}
 		if !resp.OK || resp.Output == "" {
 			t.Errorf("ps failed: OK=%v error=%q", resp.OK, resp.Error)
+		}
+	})
+
+	t.Run("version over the wire", func(t *testing.T) {
+		resp, err := client.Call(addr, token, "version", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !resp.OK {
+			t.Fatalf("version failed: error=%q", resp.Error)
+		}
+		if got := strings.TrimSpace(resp.Output); got != version.Version {
+			t.Errorf("version = %q, want %q", got, version.Version)
+		}
+	})
+
+	t.Run("version requires auth", func(t *testing.T) {
+		resp, err := client.Call(addr, "wrong", "version", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.OK || resp.Error != "unauthorized" {
+			t.Errorf("expected unauthorized, got OK=%v error=%q", resp.OK, resp.Error)
 		}
 	})
 }

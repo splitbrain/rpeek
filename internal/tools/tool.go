@@ -39,6 +39,20 @@ type Tool interface {
 	Run(ctx context.Context, env Env, raw json.RawMessage) (Result, error)
 }
 
+// LocalTool is an optional capability a Tool implements when it can also produce its
+// result in the client process, without contacting a server. The client runs Local for
+// the local answer and, when a server is addressed, additionally calls Run over the wire
+// for the remote one. Only tools reporting the binary's own identity should implement it;
+// a host-state tool run locally would silently inspect the operator's machine instead of
+// the target host, so those must remain server-only.
+type LocalTool interface {
+	Tool
+
+	// Local produces the tool's result in the calling process, using no server, jail, or
+	// arguments.
+	Local() (Result, error)
+}
+
 // Env carries the server-side dependencies a tool may draw on. A tool ignores the
 // fields it does not need.
 type Env struct {

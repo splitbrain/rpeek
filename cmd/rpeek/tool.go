@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"rpeek/internal/client"
+	"rpeek/internal/netutil"
 	"rpeek/internal/tools"
 )
 
@@ -16,7 +17,9 @@ import (
 // --host/--token — dials the server, runs the tool, and prints the result. gHost and
 // gToken are the values of any --host/--token given before the tool name; they seed the
 // corresponding flags so an explicit --host/--token after the tool name overrides them.
-// It returns the process exit code.
+// A tool that also implements tools.LocalTool is driven by runLocalTool instead, which
+// answers from this binary and treats the server as optional. It returns the process
+// exit code.
 func runTool(tool tools.Tool, args []string, gHost, gToken string) int {
 	fs, build := tool.NewFlags()
 	fs.SetOutput(io.Discard) // suppress the flag package's own output; we render our own
@@ -34,6 +37,10 @@ func runTool(tool tools.Tool, args []string, gHost, gToken string) int {
 	params, err := build(positionals)
 	if err != nil {
 		return usageErr("%v", err)
+	}
+
+	if lt, ok := tool.(tools.LocalTool); ok {
+		return runLocalTool(lt, params, *host, *token)
 	}
 
 	hostAddr, tok, code := resolveHostToken(*host, *token)
@@ -55,6 +62,42 @@ func runTool(tool tools.Tool, args []string, gHost, gToken string) int {
 	if resp.Truncated {
 		fmt.Fprintln(os.Stderr, "... (truncated)")
 	}
+	return exitOK
+}
+
+// runLocalTool drives a tool that can answer from this binary. It always prints the local
+// result. When both a host and a token resolve (from --host/--token or the RPEEK_HOST/
+// RPEEK_TOKEN environment variables) it also queries that server and prints its result
+// alongside, labelling the two; otherwise it prints the local result alone. It returns
+// the process exit code.
+func runLocalTool(lt tools.LocalTool, params any, hostFlag, tokenFlag string) int {
+	local, err := lt.Local()
+	if err != nil {
+		return fatalf("%v", err)
+	}
+
+	host, token := hostToken(hostFlag, tokenFlag)
+	if host == "" || token == "" {
+		fmt.Print(local.Output)
+		return exitOK
+	}
+
+	addr, err := netutil.NormalizeAddr(host)
+	if err != nil {
+		return usageErr("%v", err)
+	}
+	resp, err := client.Call(addr, token, lt.Name(), params)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rpeek: %v\n", err)
+		return exitError
+	}
+	if !resp.OK {
+		fmt.Fprintf(os.Stderr, "rpeek: %s\n", resp.Error)
+		return exitServer
+	}
+
+	fmt.Printf("local:  %s\n", strings.TrimRight(local.Output, "\n"))
+	fmt.Printf("remote: %s   (%s)\n", strings.TrimRight(resp.Output, "\n"), addr)
 	return exitOK
 }
 
