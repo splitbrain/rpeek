@@ -36,8 +36,8 @@ Pass the token only through `RPEEK_TOKEN`, never via `--token`.
 The toolset is self-describing — do not rely on a hardcoded list, since it can change
 between versions:
 - `rpeek help` — lists the available tools, each with a one-line summary.
-- `rpeek help <tool>` (or `rpeek <tool> --help`) — prints that tool's arguments and
-  flags with their defaults and meanings.
+- `rpeek help <tool>`  — prints that tool's arguments and flags with their defaults
+  and meanings.
 
 Run `rpeek help` first whenever you are unsure what is available or what a tool
 accepts; it is the authoritative reference. Every tool is READ-ONLY, and `help` needs no
@@ -76,8 +76,8 @@ rpeek journal --unit nginx --lines 100
 - If output ends with `... (truncated)` (stderr notes truncation), narrow the query
   (tighter `--pattern`, larger `--max-bytes` with `--offset` paging, fewer `--lines`)
   rather than assuming you saw everything.
-- Never print the token in prose or reports, and never pass it via `--token`; supply it
-  only through the `RPEEK_TOKEN` environment variable.
+- If the tool is not sufficient to solve the user's task, ask them for help. Eg. for
+  manually running tools or edit files.
 
 ## Exit codes
 `0` success · `1` protocol/transport error · `2` server-returned error (bad path,

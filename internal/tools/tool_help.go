@@ -73,11 +73,6 @@ func GeneralHelp() string {
 	b.WriteString("  rpeek [--host HOST[:PORT]] [--token TOKEN] serve [flags] [roots...]\n")
 	b.WriteString("  rpeek [--host HOST[:PORT]] [--token TOKEN] <tool> [args]\n")
 	b.WriteString("  rpeek help [tool]\n\n")
-	b.WriteString("Connection flags may appear before the subcommand or after it (interleaved\n")
-	b.WriteString("with its arguments in any order); an explicit flag overrides the RPEEK_HOST /\n")
-	b.WriteString("RPEEK_TOKEN environment variables:\n")
-	b.WriteString("  --host    server address as host or host:port (port defaults to 7017)\n")
-	b.WriteString("  --token   authentication token\n\n")
 	b.WriteString("Server:\n")
 	for _, t := range registered {
 		if _, ok := t.(ServerMode); ok {
@@ -91,7 +86,7 @@ func GeneralHelp() string {
 		}
 		fmt.Fprintf(&b, "  %-8s %s\n", t.Name(), t.Summary())
 	}
-	b.WriteString("\nRun 'rpeek help <tool>' (or 'rpeek <tool> --help') for a tool's arguments.\n")
+	b.WriteString("\nRun 'rpeek help <tool>' for a tool's arguments.\n")
 	return b.String()
 }
 
