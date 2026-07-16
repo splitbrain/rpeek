@@ -17,7 +17,7 @@ import (
 // Tool is one read-only diagnostic operation's identity and argument parsing. Execution
 // is a separate concern: a tool runs on the server if it implements RemoteTool, in the
 // client if it implements LocalTool, and both if it implements both. Every tool
-// implements at least one. Concrete tools are registered in All.
+// implements at least one. Each concrete tool registers itself from an init function.
 type Tool interface {
 	// Name returns the subcommand name, e.g. "grep".
 	Name() string

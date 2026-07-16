@@ -13,6 +13,8 @@ import (
 // tail returns the last N lines of a regular file.
 type tail struct{ readOnly }
 
+func init() { register(tail{}) }
+
 // Name returns the subcommand name.
 func (tail) Name() string { return "tail" }
 

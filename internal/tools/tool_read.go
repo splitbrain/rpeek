@@ -13,6 +13,8 @@ import (
 // offset.
 type read struct{ readOnly }
 
+func init() { register(read{}) }
+
 // Name returns the subcommand name.
 func (read) Name() string { return "read" }
 

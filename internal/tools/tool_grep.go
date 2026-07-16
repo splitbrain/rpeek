@@ -16,6 +16,8 @@ import (
 // grep searches a file, or a directory tree, for lines matching an RE2 pattern.
 type grep struct{ readOnly }
 
+func init() { register(grep{}) }
+
 // Name returns the subcommand name.
 func (grep) Name() string { return "grep" }
 

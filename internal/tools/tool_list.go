@@ -13,6 +13,8 @@ import (
 // list lists a directory in an ls -l style, one entry per line.
 type list struct{ readOnly }
 
+func init() { register(list{}) }
+
 // Name returns the subcommand name.
 func (list) Name() string { return "list" }
 

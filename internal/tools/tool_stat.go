@@ -15,6 +15,8 @@ import (
 // stat reports metadata for a path as key: value lines.
 type stat struct{ readOnly }
 
+func init() { register(stat{}) }
+
 // Name returns the subcommand name.
 func (stat) Name() string { return "stat" }
 

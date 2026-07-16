@@ -1,17 +1,20 @@
 package tools
 
-import "testing"
+import (
+	"sort"
+	"testing"
+)
 
 func TestRegistryConsistent(t *testing.T) {
 	names := Names()
-	if len(names) != len(All) {
-		t.Fatalf("Names() has %d entries, All has %d", len(names), len(All))
+	if len(names) == 0 {
+		t.Fatal("no tools registered")
+	}
+	if !sort.StringsAreSorted(names) {
+		t.Errorf("Names() is not sorted alphabetically: %v", names)
 	}
 	seen := map[string]bool{}
-	for i, name := range names {
-		if name != All[i].Name() {
-			t.Errorf("Names()[%d] = %q, All[%d].Name() = %q", i, name, i, All[i].Name())
-		}
+	for _, name := range names {
 		if seen[name] {
 			t.Errorf("duplicate tool name %q", name)
 		}

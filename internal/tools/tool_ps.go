@@ -17,6 +17,8 @@ import (
 // ps returns a ps-style snapshot of running processes, read purely from /proc.
 type ps struct{ readOnly }
 
+func init() { register(ps{}) }
+
 // Name returns the subcommand name.
 func (ps) Name() string { return "ps" }
 

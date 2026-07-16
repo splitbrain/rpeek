@@ -16,6 +16,8 @@ import (
 // validated argument vector.
 type journal struct{ readOnly }
 
+func init() { register(journal{}) }
+
 // Name returns the subcommand name.
 func (journal) Name() string { return "journal" }
 

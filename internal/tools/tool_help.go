@@ -14,6 +14,8 @@ import (
 // the client's own tools.
 type helpTool struct{ readOnly }
 
+func init() { register(helpTool{}) }
+
 // Name returns the subcommand name.
 func (helpTool) Name() string { return "help" }
 
@@ -77,13 +79,13 @@ func GeneralHelp() string {
 	b.WriteString("  --host    server address as host or host:port (port defaults to 7017)\n")
 	b.WriteString("  --token   authentication token\n\n")
 	b.WriteString("Server:\n")
-	for _, t := range All {
+	for _, t := range registered {
 		if _, ok := t.(ServerMode); ok {
 			fmt.Fprintf(&b, "  %-8s %s\n", t.Name(), t.Summary())
 		}
 	}
 	b.WriteString("\nTools (all READ-ONLY):\n")
-	for _, t := range All {
+	for _, t := range registered {
 		if _, ok := t.(ServerMode); ok {
 			continue
 		}

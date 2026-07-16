@@ -33,6 +33,8 @@ const defaultBindHost = "0.0.0.0"
 // TTL elapses.
 type serveTool struct{ readOnly }
 
+func init() { register(serveTool{}) }
+
 // Name returns the subcommand name.
 func (serveTool) Name() string { return "serve" }
 

@@ -1,21 +1,32 @@
 package tools
 
-// All is the ordered set of every diagnostic tool. Adding a tool is a new file plus one
-// entry here. An explicit ordered slice, rather than init-time self-registration, keeps
-// the full tool set greppable in one place and gives a deterministic order for help
-// output and the serve banner.
-var All = []Tool{
-	helpTool{}, hostname{}, versionTool{}, list{}, read{}, grep{}, tail{}, stat{}, ps{}, disk{}, journal{}, serveTool{},
-}
+import "sort"
 
-// byName indexes All by tool name, built once at package initialization.
-var byName = func() map[string]Tool {
-	m := make(map[string]Tool, len(All))
-	for _, t := range All {
-		m[t.Name()] = t
+// registered holds every diagnostic tool, kept sorted alphabetically by name. Each tool
+// file registers itself from an init function, so adding a tool is just dropping in its
+// file — there is no central list to update.
+var registered []Tool
+
+// byName indexes the registered tools by name for Lookup.
+var byName = map[string]Tool{}
+
+// register adds a tool to the package registry, inserting it so registered stays sorted by
+// name. Tool files call it from an init function. It panics on an empty or duplicate name:
+// both are programming errors that surface the first time the binary runs.
+func register(t Tool) {
+	name := t.Name()
+	if name == "" {
+		panic("tools: tool with empty name")
 	}
-	return m
-}()
+	if _, dup := byName[name]; dup {
+		panic("tools: duplicate tool name " + name)
+	}
+	byName[name] = t
+	i := sort.Search(len(registered), func(i int) bool { return registered[i].Name() >= name })
+	registered = append(registered, nil)
+	copy(registered[i+1:], registered[i:])
+	registered[i] = t
+}
 
 // Lookup returns the tool registered under name and whether one exists.
 func Lookup(name string) (Tool, bool) {
@@ -23,21 +34,21 @@ func Lookup(name string) (Tool, bool) {
 	return t, ok
 }
 
-// Names returns the tool names in All order.
+// Names returns the registered tool names.
 func Names() []string {
-	names := make([]string, len(All))
-	for i, t := range All {
+	names := make([]string, len(registered))
+	for i, t := range registered {
 		names[i] = t.Name()
 	}
 	return names
 }
 
-// RemoteNames returns, in All order, the names of the tools the server can run — those
-// implementing RemoteTool. It drives the serve banner, which must not advertise
-// client-only tools like help.
+// RemoteNames returns the names of the tools the server can run — those implementing
+// RemoteTool. It drives the serve banner, which must not advertise client-only tools like
+// help.
 func RemoteNames() []string {
 	var names []string
-	for _, t := range All {
+	for _, t := range registered {
 		if _, ok := t.(RemoteTool); ok {
 			names = append(names, t.Name())
 		}

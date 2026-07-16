@@ -14,6 +14,8 @@ import (
 // is how an operator confirms which build is deployed on a host.
 type versionTool struct{ readOnly }
 
+func init() { register(versionTool{}) }
+
 // Name returns the subcommand name.
 func (versionTool) Name() string { return "version" }
 

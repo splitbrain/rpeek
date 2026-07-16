@@ -17,6 +17,8 @@ import (
 // syscall.Statfs.
 type disk struct{ readOnly }
 
+func init() { register(disk{}) }
+
 // Name returns the subcommand name.
 func (disk) Name() string { return "disk" }
 

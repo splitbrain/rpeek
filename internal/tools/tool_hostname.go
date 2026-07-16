@@ -13,6 +13,8 @@ import (
 // request path works, and its output names which host answered.
 type hostname struct{ readOnly }
 
+func init() { register(hostname{}) }
+
 // Name returns the subcommand name.
 func (hostname) Name() string { return "hostname" }
 
