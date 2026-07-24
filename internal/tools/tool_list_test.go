@@ -74,6 +74,16 @@ func TestToolListBoundsLargeDirectory(t *testing.T) {
 	if !sort.StringsAreSorted(names) {
 		t.Error("list output is not sorted by name")
 	}
+
+	// The names are zero-padded and sequential, so the alphabetical prefix is
+	// the numeric prefix: the cap must keep f000000..f009999 and drop the tail,
+	// not an arbitrary filesystem-order subset.
+	if got, want := names[0], "f000000.txt"; got != want {
+		t.Errorf("first entry = %q, want %q", got, want)
+	}
+	if got, want := names[len(names)-1], fmt.Sprintf("f%06d.txt", maxListEntries-1); got != want {
+		t.Errorf("last entry = %q, want %q", got, want)
+	}
 }
 
 func TestToolListRejectsFile(t *testing.T) {

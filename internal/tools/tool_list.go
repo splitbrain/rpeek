@@ -1,12 +1,14 @@
 package tools
 
 import (
+	"container/heap"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -80,17 +82,12 @@ func (list) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, e
 	}
 	defer f.Close()
 
-	// entry pairs a directory entry name with its resolved metadata for sorting.
-	type entry struct {
-		name string
-		info os.FileInfo
-	}
-
-	// Read the directory in bounded batches so an enormous directory is never held
-	// in memory all at once; stop as soon as the entry cap is reached.
-	collected := make([]entry, 0, maxListEntries)
+	// Scan the whole directory in bounded batches, retaining only the
+	// maxListEntries lexicographically smallest names in a bounded heap. This
+	// never holds the full directory in memory yet, unlike stopping early in
+	// filesystem order, yields the true alphabetical prefix when the cap is hit.
+	kept := &nameHeap{}
 	truncated := false
-readLoop:
 	for {
 		if err := ctx.Err(); err != nil {
 			return Result{}, err
@@ -101,15 +98,18 @@ readLoop:
 			if !args.All && strings.HasPrefix(name, ".") {
 				continue
 			}
-			if len(collected) >= maxListEntries {
+			switch {
+			case kept.Len() < maxListEntries:
+				heap.Push(kept, name)
+			case name < (*kept)[0]:
+				// This name sorts before the largest one kept so far; evict
+				// the largest by overwriting the root and resifting.
+				(*kept)[0] = name
+				heap.Fix(kept, 0)
 				truncated = true
-				break readLoop
+			default:
+				truncated = true
 			}
-			fi, err := e.Info()
-			if err != nil {
-				continue
-			}
-			collected = append(collected, entry{name: name, info: fi})
 		}
 		if readErr == io.EOF {
 			break
@@ -119,19 +119,55 @@ readLoop:
 		}
 	}
 
-	// Batched reads arrive in directory order; sort for a stable, ls-style listing.
-	sort.Slice(collected, func(i, k int) bool { return collected[i].name < collected[k].name })
+	// The heap holds the selected names in heap order; sort them, then stat each
+	// survivor individually so only one entry's metadata is resident at a time.
+	names := []string(*kept)
+	sort.Strings(names)
 
 	var b strings.Builder
-	for _, e := range collected {
+	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return Result{}, err
+		}
+		fi, err := os.Lstat(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
 		fmt.Fprintf(&b, "%s %10d %s %s\n",
-			e.info.Mode().String(),
-			e.info.Size(),
-			e.info.ModTime().Format(time.RFC3339),
-			e.name,
+			fi.Mode().String(),
+			fi.Size(),
+			fi.ModTime().Format(time.RFC3339),
+			name,
 		)
 	}
 
 	out, capTrunc := capOutput(b.String(), env.Limits.MaxOutput)
 	return Result{Output: out, Truncated: truncated || capTrunc}, nil
+}
+
+// nameHeap is a max-heap of directory entry names. Keeping a bounded heap of
+// size maxListEntries while scanning retains the lexicographically smallest
+// names seen, so a truncated listing is the true alphabetical prefix of the
+// directory rather than an arbitrary subset in filesystem order.
+type nameHeap []string
+
+// Len reports the number of names currently in the heap.
+func (h nameHeap) Len() int { return len(h) }
+
+// Less orders the largest name to the root so it is the first to be evicted.
+func (h nameHeap) Less(i, k int) bool { return h[i] > h[k] }
+
+// Swap exchanges the names at indices i and k.
+func (h nameHeap) Swap(i, k int) { h[i], h[k] = h[k], h[i] }
+
+// Push appends a name to the heap backing slice.
+func (h *nameHeap) Push(x any) { *h = append(*h, x.(string)) }
+
+// Pop removes and returns the last name in the heap backing slice.
+func (h *nameHeap) Pop() any {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[:n-1]
+	return x
 }
