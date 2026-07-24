@@ -12,6 +12,7 @@ import (
 
 	"rpeek/internal/client"
 	"rpeek/internal/netutil"
+	"rpeek/internal/protocol"
 	"rpeek/internal/tools"
 )
 
@@ -65,13 +66,9 @@ func runTool(tool tools.Tool, args []string, gHost, gToken string) int {
 func runLocalOnly(local tools.LocalTool, raw json.RawMessage) int {
 	res, err := local.Local(context.Background(), localEnv(), raw)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "rpeek: %v\n", err)
-		return exitError
+		return fatalf("%v", err)
 	}
-	fmt.Print(res.Output)
-	if res.Truncated {
-		fmt.Fprintln(os.Stderr, "... (truncated)")
-	}
+	printOutput(res.Output, res.Truncated)
 	return exitOK
 }
 
@@ -82,19 +79,11 @@ func runRemote(remote tools.RemoteTool, raw json.RawMessage, hostFlag, tokenFlag
 	if code != exitOK {
 		return code
 	}
-	resp, err := client.Call(hostAddr, tok, remote.Name(), raw)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "rpeek: %v\n", err)
-		return exitError
+	resp, code := callRemote(hostAddr, tok, remote.Name(), raw)
+	if code != exitOK {
+		return code
 	}
-	if !resp.OK {
-		fmt.Fprintf(os.Stderr, "rpeek: %s\n", resp.Error)
-		return exitServer
-	}
-	fmt.Print(resp.Output)
-	if resp.Truncated {
-		fmt.Fprintln(os.Stderr, "... (truncated)")
-	}
+	printOutput(resp.Output, resp.Truncated)
 	return exitOK
 }
 
@@ -110,10 +99,7 @@ func runLocalRemote(local tools.LocalTool, remote tools.RemoteTool, raw json.Raw
 
 	host, token := hostToken(hostFlag, tokenFlag)
 	if host == "" || token == "" {
-		fmt.Print(localRes.Output)
-		if localRes.Truncated {
-			fmt.Fprintln(os.Stderr, "... (truncated)")
-		}
+		printOutput(localRes.Output, localRes.Truncated)
 		return exitOK
 	}
 
@@ -121,22 +107,44 @@ func runLocalRemote(local tools.LocalTool, remote tools.RemoteTool, raw json.Raw
 	if err != nil {
 		return usageErr("%v", err)
 	}
-	resp, err := client.Call(addr, token, remote.Name(), raw)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "rpeek: %v\n", err)
-		return exitError
-	}
-	if !resp.OK {
-		fmt.Fprintf(os.Stderr, "rpeek: %s\n", resp.Error)
-		return exitServer
+	resp, code := callRemote(addr, token, remote.Name(), raw)
+	if code != exitOK {
+		return code
 	}
 
 	fmt.Printf("local:\n%s\n\nremote (%s):\n%s\n",
 		strings.TrimRight(localRes.Output, "\n"), addr, strings.TrimRight(resp.Output, "\n"))
-	if resp.Truncated {
+	warnTruncated(resp.Truncated)
+	return exitOK
+}
+
+// callRemote dials the server and runs the named tool, returning its response. On a
+// transport error or a tool error reported by the server it prints the message to stderr
+// and returns a non-OK exit code in code; on success code is exitOK.
+func callRemote(addr, token, name string, raw json.RawMessage) (resp *protocol.Response, code int) {
+	resp, err := client.Call(addr, token, name, raw)
+	if err != nil {
+		return nil, fatalf("%v", err)
+	}
+	if !resp.OK {
+		fmt.Fprintf(os.Stderr, "rpeek: %s\n", resp.Error)
+		return nil, exitServer
+	}
+	return resp, exitOK
+}
+
+// printOutput writes a tool result's output to stdout, then a truncation notice to stderr
+// when the output was capped.
+func printOutput(output string, truncated bool) {
+	fmt.Print(output)
+	warnTruncated(truncated)
+}
+
+// warnTruncated writes a truncation notice to stderr when truncated is true.
+func warnTruncated(truncated bool) {
+	if truncated {
 		fmt.Fprintln(os.Stderr, "... (truncated)")
 	}
-	return exitOK
 }
 
 // localEnv returns the Env for a tool's Local execution: no jail — a local-capable tool
