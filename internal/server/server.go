@@ -18,12 +18,25 @@ import (
 	"rpeek/internal/protocol"
 )
 
-// connReadTimeout bounds how long a connected client has to send its request and
-// receive its response, so a client that connects but stalls cannot hold a goroutine.
-const connReadTimeout = 30 * time.Second
+// requestReadTimeout bounds how long the server waits for a connected client to complete
+// its TLS handshake and send its request line. It is deliberately short and applies before
+// authentication, so a client that connects but stalls is reaped quickly and cannot hold a
+// concurrency slot pre-auth.
+const requestReadTimeout = 10 * time.Second
+
+// responseWriteTimeout bounds how long the server will spend writing its response, so a
+// client that stops reading cannot hold a goroutine indefinitely.
+const responseWriteTimeout = 30 * time.Second
 
 // maxRequestLine bounds the size of a single request line the server will read.
 const maxRequestLine = 1 << 20
+
+// maxConcurrentConns is the default cap on connections served at once. It bounds the
+// goroutines, file descriptors, and scanner buffers the server allocates, so no volume of
+// concurrent (and as-yet unauthenticated) connections can exhaust those resources. rpeek
+// serves a single client — a handful of connections even when several sub-agents query in
+// parallel — so a small cap is ample.
+const maxConcurrentConns = 16
 
 // ToolRunner runs a named tool's server-side operation. It is the server's sole view of
 // the tool set: given a tool name and its raw arguments it returns the tool's text output
@@ -42,11 +55,13 @@ type Server struct {
 	token string
 	// logger writes one audit line per request to stderr.
 	logger *log.Logger
+	// maxConns caps the number of connections handled concurrently.
+	maxConns int
 }
 
 // NewServer builds a Server from the tool runner, the shared auth token, and the logger.
 func NewServer(runner ToolRunner, token string, logger *log.Logger) *Server {
-	return &Server{runner: runner, token: token, logger: logger}
+	return &Server{runner: runner, token: token, logger: logger, maxConns: maxConcurrentConns}
 }
 
 // Serve accepts connections on ln until ctx is cancelled, handling each in its own
@@ -58,7 +73,13 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		ln.Close()
 	}()
 
+	// sem bounds concurrency: a slot is acquired before a connection is handed to a
+	// goroutine and released when that goroutine returns. When all slots are taken the
+	// accept loop blocks here, leaving further connections queued in the kernel backlog
+	// (and ultimately refused) rather than each spawning a goroutine of its own.
+	sem := make(chan struct{}, s.maxConns)
 	var wg sync.WaitGroup
+acceptLoop:
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -68,9 +89,18 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 			s.logger.Printf("accept error: %v", err)
 			continue
 		}
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			// Shutting down while at capacity: drop the connection instead of
+			// waiting for a slot, so shutdown is not gated on in-flight work.
+			conn.Close()
+			break acceptLoop
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() { <-sem }()
 			s.handleConn(ctx, conn)
 		}()
 	}
@@ -99,7 +129,7 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 		}
 	}()
 
-	_ = conn.SetReadDeadline(time.Now().Add(connReadTimeout))
+	_ = conn.SetReadDeadline(time.Now().Add(requestReadTimeout))
 
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxRequestLine)
@@ -136,7 +166,7 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 
 // writeResponse marshals resp, appends a newline, and writes it under a deadline.
 func (s *Server) writeResponse(conn net.Conn, resp protocol.Response) {
-	_ = conn.SetWriteDeadline(time.Now().Add(connReadTimeout))
+	_ = conn.SetWriteDeadline(time.Now().Add(responseWriteTimeout))
 	data, err := json.Marshal(resp)
 	if err != nil {
 		data, _ = json.Marshal(protocol.Response{OK: false, Error: "internal error"})
