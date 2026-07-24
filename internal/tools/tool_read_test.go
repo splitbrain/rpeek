@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestToolRead(t *testing.T) {
@@ -39,6 +40,23 @@ func TestToolRead(t *testing.T) {
 	}
 	if res.Output != "one" || !res.Truncated {
 		t.Errorf("capped read = %q trunc=%v, want \"one\" true", res.Output, res.Truncated)
+	}
+}
+
+func TestToolReadUnboundedOutput(t *testing.T) {
+	j, dir := fixtureJail(t)
+	env := Env{Jail: j, Limits: Limits{MaxOutput: -1, Timeout: 10 * time.Second}}
+	path := filepath.Join(dir, "alpha.txt")
+
+	res, err := read{}.Remote(context.Background(), env, mustRaw(t, readArgs{Path: path}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Output != "one\ntwo\nthree\n" {
+		t.Errorf("unbounded read = %q, want full file", res.Output)
+	}
+	if res.Truncated {
+		t.Error("unbounded read should not be truncated")
 	}
 }
 

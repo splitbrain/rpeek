@@ -50,6 +50,18 @@ func capOutput(s string, max int) (string, bool) {
 	return s[:cut], true
 }
 
+// clampLimit resolves a requested count against a default and a hard maximum. A
+// non-positive request selects def; the result is then capped at max.
+func clampLimit(requested, def, max int) int {
+	if requested <= 0 {
+		requested = def
+	}
+	if requested > max {
+		requested = max
+	}
+	return requested
+}
+
 // singlePath requires exactly one positional argument and returns it.
 func singlePath(tool string, pos []string) (string, error) {
 	switch len(pos) {

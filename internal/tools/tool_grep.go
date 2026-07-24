@@ -88,13 +88,7 @@ func (grep) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, e
 		return Result{}, fmt.Errorf("invalid pattern: %w", err)
 	}
 
-	maxMatches := args.MaxMatches
-	if maxMatches <= 0 {
-		maxMatches = grepDefaultMatches
-	}
-	if maxMatches > grepMaxMatches {
-		maxMatches = grepMaxMatches
-	}
+	maxMatches := clampLimit(args.MaxMatches, grepDefaultMatches, grepMaxMatches)
 
 	target, err := env.Jail.Resolve(args.Path)
 	if err != nil {

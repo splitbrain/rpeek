@@ -69,13 +69,7 @@ func (tail) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, e
 		return Result{}, err
 	}
 
-	lines := args.Lines
-	if lines <= 0 {
-		lines = tailDefaultLines
-	}
-	if lines > tailMaxLines {
-		lines = tailMaxLines
-	}
+	lines := clampLimit(args.Lines, tailDefaultLines, tailMaxLines)
 
 	f, err := os.Open(path)
 	if err != nil {

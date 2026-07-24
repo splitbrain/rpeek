@@ -73,14 +73,8 @@ func (read) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, e
 		return Result{}, fmt.Errorf("offset must not be negative")
 	}
 
-	maxBytes := args.MaxBytes
-	if maxBytes <= 0 {
-		maxBytes = readDefaultBytes
-	}
-	if maxBytes > readHardBytes {
-		maxBytes = readHardBytes
-	}
-	if maxBytes > env.Limits.MaxOutput {
+	maxBytes := clampLimit(args.MaxBytes, readDefaultBytes, readHardBytes)
+	if env.Limits.MaxOutput >= 0 && maxBytes > env.Limits.MaxOutput {
 		maxBytes = env.Limits.MaxOutput
 	}
 

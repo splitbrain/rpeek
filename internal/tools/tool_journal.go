@@ -72,13 +72,7 @@ func (journal) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result
 		return Result{}, fmt.Errorf("journalctl is not available on this host")
 	}
 
-	lines := args.Lines
-	if lines <= 0 {
-		lines = journalDefaultLines
-	}
-	if lines > journalMaxLines {
-		lines = journalMaxLines
-	}
+	lines := clampLimit(args.Lines, journalDefaultLines, journalMaxLines)
 
 	argv := []string{"--no-pager", "-n", strconv.Itoa(lines), "-o", "short-iso"}
 	if args.Unit != "" {
