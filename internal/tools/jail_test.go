@@ -61,6 +61,23 @@ func TestResolveRootItself(t *testing.T) {
 	}
 }
 
+func TestResolveFilesystemRoot(t *testing.T) {
+	j, err := NewJailSet([]string{string(os.PathSeparator)})
+	if err != nil {
+		t.Fatalf("filesystem root rejected as a jail root: %v", err)
+	}
+	// A real path beneath "/" must resolve; before the fix the separator-aware
+	// prefix check compared against a doubled separator ("//") and matched nothing.
+	target := t.TempDir()
+	got, err := j.Resolve(target)
+	if err != nil {
+		t.Fatalf("path beneath the filesystem root rejected: %v", err)
+	}
+	if got != mustEvalSymlinks(t, target) {
+		t.Errorf("Resolve = %q, want %q", got, mustEvalSymlinks(t, target))
+	}
+}
+
 func TestResolveFileInsideJail(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "sub", "f.txt")

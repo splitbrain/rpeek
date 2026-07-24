@@ -110,13 +110,19 @@ func (j *JailSet) ResolveFile(p string) (string, error) {
 }
 
 // contains reports whether real equals one of the roots or lies beneath one, using a
-// path-separator-aware prefix check so "/rootfoo" is not treated as inside "/root".
+// path-separator-aware prefix check so "/rootfoo" is not treated as inside "/root". A
+// root that already ends in a separator (such as the filesystem root "/") is handled
+// without producing a doubled separator that would match nothing.
 func (j *JailSet) contains(real string) bool {
 	for _, root := range j.roots {
 		if real == root {
 			return true
 		}
-		if strings.HasPrefix(real, root+string(os.PathSeparator)) {
+		prefix := root
+		if !strings.HasSuffix(prefix, string(os.PathSeparator)) {
+			prefix += string(os.PathSeparator)
+		}
+		if strings.HasPrefix(real, prefix) {
 			return true
 		}
 	}
