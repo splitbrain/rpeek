@@ -7,10 +7,9 @@ import (
 	"os"
 )
 
-// hostname returns the server's kernel hostname. It reads no files and takes no
-// arguments, so it is the cheapest way to confirm a client can reach the server,
-// complete the TLS handshake, and authenticate: a successful reply proves the whole
-// request path works, and its output names which host answered.
+// hostname reports the server's kernel hostname. It reads no files and takes no
+// arguments, so a successful reply doubles as a connectivity and auth check that names
+// which host answered.
 type hostname struct{ readOnly }
 
 func init() { register(hostname{}) }
@@ -38,7 +37,7 @@ func (hostname) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 	}
 }
 
-// Run returns the server's hostname followed by a newline.
+// Remote returns the server's hostname followed by a newline.
 func (hostname) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	if _, err := decodeArgs[hostnameArgs](raw); err != nil {
 		return Result{}, err

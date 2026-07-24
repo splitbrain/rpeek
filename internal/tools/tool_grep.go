@@ -69,7 +69,7 @@ func (grep) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 	}
 }
 
-// Run searches the resolved target and returns matches in grep -n style:
+// Remote searches the resolved target and returns matches in grep -n style:
 // "path:line: text".
 func (grep) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	args, err := decodeArgs[grepArgs](raw)

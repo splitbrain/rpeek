@@ -58,7 +58,7 @@ func (list) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 	}
 }
 
-// Run lists the resolved directory, honoring the dotfile filter and entry cap.
+// Remote lists the resolved directory, honoring the dotfile filter and entry cap.
 func (list) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, error) {
 	args, err := decodeArgs[listArgs](raw)
 	if err != nil {

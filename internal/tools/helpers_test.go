@@ -13,7 +13,7 @@ func testEnv(j *JailSet) Env {
 	return Env{Jail: j, Limits: Limits{MaxOutput: 1 << 20, Timeout: 10 * time.Second}}
 }
 
-// mustRaw marshals v to the raw JSON a tool's Run expects.
+// mustRaw marshals v to the raw JSON a tool's Remote expects.
 func mustRaw(t *testing.T, v any) json.RawMessage {
 	t.Helper()
 	b, err := json.Marshal(v)

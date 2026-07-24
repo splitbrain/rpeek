@@ -33,18 +33,16 @@ const responseWriteTimeout = 30 * time.Second
 const maxRequestLine = 1 << 20
 
 // maxConcurrentConns is the default cap on connections served at once. It bounds the
-// goroutines, file descriptors, and scanner buffers the server allocates, so no volume of
-// concurrent (and as-yet unauthenticated) connections can exhaust those resources. rpeek
-// serves a single client — a handful of connections even when several sub-agents query in
-// parallel — so a small cap is ample.
+// goroutines, file descriptors, and scanner buffers the server allocates, so no flood of
+// concurrent, as-yet unauthenticated connections can exhaust those resources. rpeek serves
+// a single client, so a small cap is ample.
 const maxConcurrentConns = 16
 
 // acceptBackoffInitial and acceptBackoffMax bound the capped exponential backoff the
-// accept loop applies after a failed Accept. A persistent error — classically EMFILE or
-// ENFILE once file descriptors are exhausted — otherwise returns immediately on every
-// iteration, spinning the CPU at 100% and flooding the log. Backing off from a few
-// milliseconds up to a second caps that cost and gives the transient condition time to
-// clear, mirroring net/http's Serve loop.
+// accept loop applies after a failed Accept. A persistent error, such as EMFILE once
+// file descriptors are exhausted, otherwise returns immediately on every iteration,
+// spinning the CPU and flooding the log; the backoff caps that cost and gives a
+// transient condition time to clear.
 const (
 	acceptBackoffInitial = 5 * time.Millisecond
 	acceptBackoffMax     = 1 * time.Second
