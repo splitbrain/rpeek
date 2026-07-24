@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -10,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // journal returns recent systemd journal lines by invoking journalctl with a fixed,
@@ -88,32 +88,46 @@ func (journal) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result
 		argv = append(argv, "-u", args.Unit)
 	}
 
-	out, err := runJournalctl(ctx, env.Journalctl, argv)
+	out, dropped, err := runJournalctl(ctx, env.Journalctl, argv, env.Limits.MaxOutput)
 	if err != nil {
 		return Result{}, err
 	}
 
 	capped, trunc := capOutput(string(out), env.Limits.MaxOutput)
-	return Result{Output: capped, Truncated: trunc}, nil
+	return Result{Output: capped, Truncated: dropped || trunc}, nil
 }
 
+// journalStderrCap bounds how much of journalctl's stderr is retained for error
+// reporting. Diagnostic messages are short; the cap only guards against a runaway child.
+const journalStderrCap = 64 << 10
+
 // runJournalctl executes journalctl at path with the given fixed argument vector under
-// ctx and returns its captured stdout. The argument vector is always passed as discrete
-// arguments, never interpolated into a shell string. On failure it returns the context
-// error if the deadline fired, otherwise a message built from journalctl's stderr.
-func runJournalctl(ctx context.Context, path string, argv []string) ([]byte, error) {
+// ctx and returns its captured stdout together with whether that stdout was truncated at
+// the output cap. The argument vector is always passed as discrete arguments, never
+// interpolated into a shell string. Stdout collection is bounded near maxOutput (plus a
+// UTF-8 rune of headroom so the eventual capOutput can trim on a rune boundary) so a
+// host with very large journal messages cannot make the server buffer the entire stream
+// before it is trimmed; a negative maxOutput leaves collection unbounded. On failure it
+// returns the context error if the deadline fired, otherwise a message built from
+// journalctl's stderr.
+func runJournalctl(ctx context.Context, path string, argv []string, maxOutput int) ([]byte, bool, error) {
+	stdoutCap := maxOutput
+	if stdoutCap >= 0 {
+		stdoutCap += utf8.UTFMax
+	}
 	cmd := exec.CommandContext(ctx, path, argv...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout := &capWriter{cap: stdoutCap}
+	stderr := &capWriter{cap: journalStderrCap}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, false, ctx.Err()
 		}
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return nil, fmt.Errorf("journalctl: %s", msg)
+		if msg := strings.TrimSpace(stderr.buf.String()); msg != "" {
+			return nil, false, fmt.Errorf("journalctl: %s", msg)
 		}
-		return nil, fmt.Errorf("journalctl: %w", err)
+		return nil, false, fmt.Errorf("journalctl: %w", err)
 	}
-	return stdout.Bytes(), nil
+	return stdout.buf.Bytes(), stdout.dropped, nil
 }
