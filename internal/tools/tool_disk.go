@@ -32,14 +32,14 @@ func (disk) Usage() string { return "disk" }
 type diskArgs struct{}
 
 // pseudoFS lists filesystem types disk skips, since they do not represent real storage
-// usage.
-var pseudoFS = map[string]bool{
-	"proc": true, "sysfs": true, "cgroup": true, "cgroup2": true,
-	"devtmpfs": true, "devpts": true, "mqueue": true, "hugetlbfs": true,
-	"debugfs": true, "tracefs": true, "securityfs": true, "pstore": true,
-	"bpf": true, "configfs": true, "fusectl": true, "autofs": true,
-	"binfmt_misc": true, "sysfs2": true, "ramfs": true, "nsfs": true,
-	"overlay": false, // overlay is real enough to report
+// usage. overlay is deliberately excluded: it is backed by real storage and worth
+// reporting.
+var pseudoFS = map[string]struct{}{
+	"proc": {}, "sysfs": {}, "cgroup": {}, "cgroup2": {},
+	"devtmpfs": {}, "devpts": {}, "mqueue": {}, "hugetlbfs": {},
+	"debugfs": {}, "tracefs": {}, "securityfs": {}, "pstore": {},
+	"bpf": {}, "configfs": {}, "fusectl": {}, "autofs": {},
+	"binfmt_misc": {}, "ramfs": {}, "nsfs": {},
 }
 
 // NewFlags builds the disk flag set and its argument builder.
@@ -81,7 +81,7 @@ func (disk) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, e
 		device := unescapeMount(fields[0])
 		mountpoint := unescapeMount(fields[1])
 		fstype := fields[2]
-		if skip, known := pseudoFS[fstype]; known && skip {
+		if _, skip := pseudoFS[fstype]; skip {
 			continue
 		}
 		if seen[mountpoint] {
