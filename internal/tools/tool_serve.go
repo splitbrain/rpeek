@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"rpeek/internal/conf"
 	"rpeek/internal/netutil"
 	"rpeek/internal/server"
 	"rpeek/internal/tlsutil"
@@ -91,13 +92,7 @@ func (serveTool) Serve(ctx context.Context, raw json.RawMessage, stdout io.Write
 		return err
 	}
 
-	bind := args.Host
-	if bind == "" {
-		bind = os.Getenv("RPEEK_HOST")
-	}
-	if bind == "" {
-		bind = defaultBindHost
-	}
+	bind := conf.Resolve(args.Host, conf.EnvHost, defaultBindHost)
 	listenAddr, err := netutil.NormalizeAddr(bind)
 	if err != nil {
 		return fmt.Errorf("invalid bind address: %v", err)
@@ -116,10 +111,7 @@ func (serveTool) Serve(ctx context.Context, raw json.RawMessage, stdout io.Write
 		return err
 	}
 
-	token := args.Token
-	if token == "" {
-		token = os.Getenv("RPEEK_TOKEN")
-	}
+	token := conf.Resolve(args.Token, conf.EnvToken, "")
 	if token == "" {
 		token, err = generateToken()
 		if err != nil {

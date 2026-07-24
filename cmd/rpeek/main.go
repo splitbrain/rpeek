@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 
+	"rpeek/internal/conf"
 	"rpeek/internal/netutil"
 	"rpeek/internal/tools"
 )
@@ -69,15 +70,7 @@ func run(args []string) int {
 // resolveHostToken validates and that a LocalTool uses to decide whether a server was
 // addressed at all.
 func hostToken(hostFlag, tokenFlag string) (host, token string) {
-	host = hostFlag
-	if host == "" {
-		host = os.Getenv("RPEEK_HOST")
-	}
-	token = tokenFlag
-	if token == "" {
-		token = os.Getenv("RPEEK_TOKEN")
-	}
-	return host, token
+	return conf.Resolve(hostFlag, conf.EnvHost, ""), conf.Resolve(tokenFlag, conf.EnvToken, "")
 }
 
 // resolveHostToken applies the precedence flag > env for the client's server address
