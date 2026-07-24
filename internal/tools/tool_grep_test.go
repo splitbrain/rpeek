@@ -2,9 +2,11 @@ package tools
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestToolGrepFile(t *testing.T) {
@@ -57,6 +59,50 @@ func TestToolGrepCap(t *testing.T) {
 	}
 	if strings.Count(res.Output, "\n") != 1 || !res.Truncated {
 		t.Errorf("capped grep = %d lines trunc=%v, want 1 true:\n%s", strings.Count(res.Output, "\n"), res.Truncated, res.Output)
+	}
+}
+
+func TestToolGrepMaxMatchesHardCap(t *testing.T) {
+	j, dir := fixtureJail(t)
+	// A match count far above the hard cap must be clamped, not honoured verbatim.
+	res, err := grep{}.Remote(context.Background(), testEnv(j),
+		mustRaw(t, grepArgs{Path: dir, Pattern: "ERROR", MaxMatches: 1_000_000_000}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The fixture has fewer than grepMaxMatches matches, so all are returned untruncated;
+	// the clamp is exercised by the request not producing an error or unbounded work.
+	if strings.Count(res.Output, "\n") == 0 {
+		t.Errorf("expected matches with an over-large --max-matches:\n%s", res.Output)
+	}
+}
+
+func TestToolGrepIncrementalOutputCap(t *testing.T) {
+	dir := t.TempDir()
+	// One very long matching line larger than a tiny output cap.
+	long := strings.Repeat("x", 4096) + " ERROR\n"
+	var content strings.Builder
+	for i := 0; i < 50; i++ {
+		content.WriteString(long)
+	}
+	p := filepath.Join(dir, "big.log")
+	if err := os.WriteFile(p, []byte(content.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	j, err := NewJailSet([]string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := Env{Jail: j, Limits: Limits{MaxOutput: 1024, Timeout: 10 * time.Second}}
+	res, err := grep{}.Remote(context.Background(), env, mustRaw(t, grepArgs{Path: p, Pattern: "ERROR"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Truncated {
+		t.Error("expected truncation when matches exceed the output cap")
+	}
+	if len(res.Output) > 1024 {
+		t.Errorf("output %d bytes exceeds MaxOutput cap of 1024", len(res.Output))
 	}
 }
 

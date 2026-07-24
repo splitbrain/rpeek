@@ -44,8 +44,12 @@ type grepArgs struct {
 	MaxMatches int `json:"max_matches,omitempty"`
 }
 
-// grepDefaultMatches is the default cap on matching lines.
-const grepDefaultMatches = 1000
+const (
+	// grepDefaultMatches is the default cap on matching lines when the client asks for none.
+	grepDefaultMatches = 1000
+	// grepMaxMatches is the hard cap on matching lines regardless of the client request.
+	grepMaxMatches = 100000
+)
 
 // NewFlags builds the grep flag set and its argument builder.
 func (grep) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
@@ -88,6 +92,9 @@ func (grep) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, e
 	if maxMatches <= 0 {
 		maxMatches = grepDefaultMatches
 	}
+	if maxMatches > grepMaxMatches {
+		maxMatches = grepMaxMatches
+	}
 
 	target, err := env.Jail.Resolve(args.Path)
 	if err != nil {
@@ -123,6 +130,13 @@ func (grep) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, e
 			text := sc.Text()
 			if re.MatchString(text) {
 				if matches >= maxMatches {
+					truncated = true
+					return errStopScan
+				}
+				// Stop before the live buffer can exceed the output cap so memory is
+				// bounded incrementally rather than trimmed after the whole result set
+				// is resident; this matters for files with very long matching lines.
+				if env.Limits.MaxOutput >= 0 && b.Len() >= env.Limits.MaxOutput {
 					truncated = true
 					return errStopScan
 				}
