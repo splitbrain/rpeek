@@ -38,6 +38,17 @@ const maxRequestLine = 1 << 20
 // parallel — so a small cap is ample.
 const maxConcurrentConns = 16
 
+// acceptBackoffInitial and acceptBackoffMax bound the capped exponential backoff the
+// accept loop applies after a failed Accept. A persistent error — classically EMFILE or
+// ENFILE once file descriptors are exhausted — otherwise returns immediately on every
+// iteration, spinning the CPU at 100% and flooding the log. Backing off from a few
+// milliseconds up to a second caps that cost and gives the transient condition time to
+// clear, mirroring net/http's Serve loop.
+const (
+	acceptBackoffInitial = 5 * time.Millisecond
+	acceptBackoffMax     = 1 * time.Second
+)
+
 // ToolRunner runs a named tool's server-side operation. It is the server's sole view of
 // the tool set: given a tool name and its raw arguments it returns the tool's text output
 // and truncation flag, or an error — unknown tool, no server-side operation, or a failure
@@ -79,6 +90,10 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	// (and ultimately refused) rather than each spawning a goroutine of its own.
 	sem := make(chan struct{}, s.maxConns)
 	var wg sync.WaitGroup
+	// acceptDelay grows on consecutive Accept failures and resets to zero after a
+	// successful accept, so a burst of transient errors backs off but normal operation
+	// pays no cost.
+	var acceptDelay time.Duration
 acceptLoop:
 	for {
 		conn, err := ln.Accept()
@@ -86,9 +101,23 @@ acceptLoop:
 			if ctx.Err() != nil {
 				break
 			}
-			s.logger.Printf("accept error: %v", err)
+			if acceptDelay == 0 {
+				acceptDelay = acceptBackoffInitial
+			} else {
+				acceptDelay *= 2
+			}
+			if acceptDelay > acceptBackoffMax {
+				acceptDelay = acceptBackoffMax
+			}
+			s.logger.Printf("accept error (retrying in %s): %v", acceptDelay, err)
+			select {
+			case <-time.After(acceptDelay):
+			case <-ctx.Done():
+				break acceptLoop
+			}
 			continue
 		}
+		acceptDelay = 0
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
