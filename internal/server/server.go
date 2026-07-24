@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"log"
 	"net"
 	"runtime/debug"
@@ -163,7 +164,12 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxRequestLine)
 	if !scanner.Scan() {
-		// Nothing readable; no meaningful response can be sent.
+		// A request line exceeding maxRequestLine surfaces as ErrTooLong; answer it so
+		// the client sees "request too large" rather than the generic "no response from
+		// server". Any other failure (EOF, timeout) leaves nothing meaningful to send.
+		if errors.Is(scanner.Err(), bufio.ErrTooLong) {
+			s.writeResponse(conn, protocol.Response{OK: false, Error: "request too large"})
+		}
 		s.logRequest(remote, "", false, time.Since(start), 0)
 		return
 	}

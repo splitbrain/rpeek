@@ -1,6 +1,8 @@
 package server_test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"rpeek/internal/client"
+	"rpeek/internal/protocol"
 	"rpeek/internal/server"
 	"rpeek/internal/tlsutil"
 	"rpeek/internal/tools"
@@ -211,6 +214,41 @@ func TestHandleConnRecoversFromPanic(t *testing.T) {
 	}
 	if resp2.OK {
 		t.Error("second panicking tool should not return OK")
+	}
+}
+
+func TestOversizedRequestLine(t *testing.T) {
+	root := t.TempDir()
+	const token = "tok"
+	addr, cancel := startServer(t, root, token)
+	defer cancel()
+
+	conn, err := tls.Dial("tcp", addr, tlsutil.ClientTLSConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+
+	// A request line larger than maxRequestLine (1 MiB) with no terminating newline
+	// forces the server's scanner to report ErrTooLong. The write runs in a goroutine
+	// because the server answers and closes as soon as it detects the overflow, which
+	// may break the write before the whole payload is flushed.
+	go func() {
+		_, _ = conn.Write(bytes.Repeat([]byte("A"), 2<<20))
+	}()
+
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 0, 64*1024), 16<<20)
+	if !scanner.Scan() {
+		t.Fatalf("expected a response line, got none: %v", scanner.Err())
+	}
+	var resp protocol.Response
+	if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid response: %v", err)
+	}
+	if resp.OK || resp.Error != "request too large" {
+		t.Errorf("expected request too large, got OK=%v error=%q", resp.OK, resp.Error)
 	}
 }
 
