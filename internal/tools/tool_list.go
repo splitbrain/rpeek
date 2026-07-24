@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -36,6 +38,10 @@ type listArgs struct {
 
 // maxListEntries bounds how many directory entries list returns.
 const maxListEntries = 10000
+
+// listBatchSize bounds how many entries are read from the directory per syscall,
+// so a directory with an enormous number of entries is never fully resident.
+const listBatchSize = 1024
 
 // NewFlags builds the list flag set and its argument builder.
 func (list) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
@@ -68,37 +74,62 @@ func (list) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, e
 		return Result{}, fmt.Errorf("%s: not a directory", args.Path)
 	}
 
-	entries, err := os.ReadDir(dir)
+	f, err := os.Open(dir)
 	if err != nil {
 		return Result{}, err
 	}
+	defer f.Close()
 
-	var b strings.Builder
+	// entry pairs a directory entry name with its resolved metadata for sorting.
+	type entry struct {
+		name string
+		info os.FileInfo
+	}
+
+	// Read the directory in bounded batches so an enormous directory is never held
+	// in memory all at once; stop as soon as the entry cap is reached.
+	collected := make([]entry, 0, maxListEntries)
 	truncated := false
-	count := 0
-	for _, e := range entries {
+readLoop:
+	for {
 		if err := ctx.Err(); err != nil {
 			return Result{}, err
 		}
-		name := e.Name()
-		if !args.All && strings.HasPrefix(name, ".") {
-			continue
+		batch, readErr := f.ReadDir(listBatchSize)
+		for _, e := range batch {
+			name := e.Name()
+			if !args.All && strings.HasPrefix(name, ".") {
+				continue
+			}
+			if len(collected) >= maxListEntries {
+				truncated = true
+				break readLoop
+			}
+			fi, err := e.Info()
+			if err != nil {
+				continue
+			}
+			collected = append(collected, entry{name: name, info: fi})
 		}
-		if count >= maxListEntries {
-			truncated = true
+		if readErr == io.EOF {
 			break
 		}
-		fi, err := e.Info()
-		if err != nil {
-			continue
+		if readErr != nil {
+			return Result{}, readErr
 		}
+	}
+
+	// Batched reads arrive in directory order; sort for a stable, ls-style listing.
+	sort.Slice(collected, func(i, k int) bool { return collected[i].name < collected[k].name })
+
+	var b strings.Builder
+	for _, e := range collected {
 		fmt.Fprintf(&b, "%s %10d %s %s\n",
-			fi.Mode().String(),
-			fi.Size(),
-			fi.ModTime().Format(time.RFC3339),
-			name,
+			e.info.Mode().String(),
+			e.info.Size(),
+			e.info.ModTime().Format(time.RFC3339),
+			e.name,
 		)
-		count++
 	}
 
 	out, capTrunc := capOutput(b.String(), env.Limits.MaxOutput)

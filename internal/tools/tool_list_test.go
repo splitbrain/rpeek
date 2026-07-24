@@ -2,7 +2,10 @@ package tools
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -29,6 +32,47 @@ func TestToolList(t *testing.T) {
 	}
 	if !strings.Contains(resAll.Output, ".hidden") {
 		t.Errorf("list --all should include dotfiles:\n%s", resAll.Output)
+	}
+}
+
+func TestToolListBoundsLargeDirectory(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "many")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const n = maxListEntries + 5
+	for i := 0; i < n; i++ {
+		p := filepath.Join(sub, fmt.Sprintf("f%06d.txt", i))
+		if err := os.WriteFile(p, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	j, err := NewJailSet([]string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := list{}.Remote(context.Background(), testEnv(j), mustRaw(t, listArgs{Path: sub}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Truncated {
+		t.Error("expected Truncated for a directory exceeding the entry cap")
+	}
+
+	lines := strings.Split(strings.TrimRight(res.Output, "\n"), "\n")
+	if len(lines) != maxListEntries {
+		t.Errorf("expected %d entries, got %d", maxListEntries, len(lines))
+	}
+
+	names := make([]string, len(lines))
+	for i, ln := range lines {
+		fields := strings.Fields(ln)
+		names[i] = fields[len(fields)-1]
+	}
+	if !sort.StringsAreSorted(names) {
+		t.Error("list output is not sorted by name")
 	}
 }
 
