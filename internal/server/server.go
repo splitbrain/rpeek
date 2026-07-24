@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"log"
 	"net"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -83,6 +84,21 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	start := time.Now()
 	remote := conn.RemoteAddr().String()
+	var tool string
+
+	// Recover from any panic during request handling so a single pathological
+	// request degrades to one failed response instead of terminating the whole
+	// server process. The panic value and stack are logged server-side only; the
+	// client receives a generic error carrying no internal detail.
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Printf("panic recovered: remote=%s tool=%s panic=%v\n%s",
+				remote, tool, r, debug.Stack())
+			s.writeResponse(conn, protocol.Response{OK: false, Error: "internal error"})
+			s.logRequest(remote, tool, false, time.Since(start), 0)
+		}
+	}()
+
 	_ = conn.SetReadDeadline(time.Now().Add(connReadTimeout))
 
 	scanner := bufio.NewScanner(conn)
@@ -99,6 +115,7 @@ func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 		s.logRequest(remote, "", false, time.Since(start), 0)
 		return
 	}
+	tool = req.Tool
 
 	if subtle.ConstantTimeCompare([]byte(req.Token), []byte(s.token)) != 1 {
 		s.writeResponse(conn, protocol.Response{OK: false, Error: "unauthorized"})

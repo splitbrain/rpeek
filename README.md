@@ -20,7 +20,8 @@ copy-pasting logs and configs by hand.
 3. **Token auth on every request.** No token, no service. Compared in constant time.
 4. **TLS for confidentiality.** Ad-hoc self-signed cert; the client does not verify it.
    The token authenticates; TLS encrypts.
-5. **Fail closed.** Bad token, bad path, unknown tool, malformed request → error.
+5. **Fail closed.** Bad token, bad path, unknown tool, malformed request, or an
+   internal panic → error.
 6. **Bounded output.** Every tool caps its output size and respects a timeout.
 
 ## Build

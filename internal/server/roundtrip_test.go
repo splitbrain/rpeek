@@ -3,6 +3,7 @@ package server_test
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"io"
 	"log"
 	"net"
@@ -155,6 +156,62 @@ func TestRoundTrip(t *testing.T) {
 			t.Error("help has no server-side operation and should be rejected")
 		}
 	})
+}
+
+// panicRunner is a ToolRunner whose RunRemote always panics, used to verify the
+// server recovers from a panicking tool instead of crashing the whole process.
+type panicRunner struct{}
+
+// RunRemote always panics.
+func (panicRunner) RunRemote(ctx context.Context, name string, args json.RawMessage) (string, bool, error) {
+	panic("boom")
+}
+
+func TestHandleConnRecoversFromPanic(t *testing.T) {
+	const token = "tok"
+	tlsCfg, err := tlsutil.ServerTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", tlsCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := server.NewServer(panicRunner{}, token, log.New(io.Discard, "", 0))
+
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		_ = srv.Serve(ctx, ln)
+		close(done)
+	}()
+	defer func() {
+		stop()
+		<-done
+	}()
+	addr := ln.Addr().String()
+
+	// A panicking tool must degrade to a generic error response, not crash the server.
+	resp, err := client.Call(addr, token, "boom", nil)
+	if err != nil {
+		t.Fatalf("call failed: %v", err)
+	}
+	if resp.OK {
+		t.Error("panicking tool should not return OK")
+	}
+	if resp.Error != "internal error" {
+		t.Errorf("error = %q, want %q", resp.Error, "internal error")
+	}
+
+	// The server must still be serving: a second request also gets a response,
+	// proving the panic did not terminate the process.
+	resp2, err := client.Call(addr, token, "boom", nil)
+	if err != nil {
+		t.Fatalf("second call failed (server may have crashed): %v", err)
+	}
+	if resp2.OK {
+		t.Error("second panicking tool should not return OK")
+	}
 }
 
 func TestServerShutdownStopsAccepting(t *testing.T) {
