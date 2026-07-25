@@ -15,7 +15,8 @@ LDFLAGS := -s -w -X rpeek/internal/version.Version=$(VERSION)
 # Release targets built by the dist target; mirrors the CI matrix.
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
-# Build static binaries with no cgo, as the released binaries are.
+# Build static binaries with no cgo, as the released binaries are. The test
+# target re-enables cgo for itself, since the race detector requires it.
 export CGO_ENABLED := 0
 
 .DEFAULT_GOAL := build
@@ -27,6 +28,7 @@ build: ## Build the binary for the host platform into bin/
 install: ## Install the binary into GOBIN with the version stamped in
 	$(GO) install -trimpath -ldflags "$(LDFLAGS)" ./cmd/rpeek
 
+test: export CGO_ENABLED := 1
 test: ## Run the tests with the race detector
 	$(GO) test -race ./...
 
