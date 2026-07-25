@@ -64,7 +64,30 @@ rpeek stat /etc/hosts
 rpeek ps
 rpeek disk
 rpeek journal --unit nginx --lines 100
+rpeek db-list
+rpeek db-tables --db app
+rpeek db-schema --db app orders
+rpeek sql --db app "SELECT state, COUNT(*) AS n FROM orders GROUP BY state ORDER BY n DESC"
 ```
+
+## Databases
+When the answer lives in an application database (row counts, joins, "how many are stuck
+in `failed`?"), the server may expose read-only database access by **alias**. You never
+supply a DSN — only the alias the operator configured. Work in this order:
+1. `rpeek db-list` — the entry point: shows the configured aliases with engine and host.
+   Nothing to query means no databases were configured; ask the user, do not guess a DSN.
+2. `rpeek db-tables --db <alias>` — the tables and views you may read.
+3. `rpeek db-schema --db <alias> <table>` — a table's columns, types, and nullability, so
+   you use real column names.
+4. `rpeek sql --db <alias> "<query>"` — run the query. Quote the whole query as one
+   argument.
+
+The query language looks like SQL but is a restricted, SELECT-only subset: `SELECT` with
+joins, `WHERE`, `GROUP BY`, `ORDER BY`, and `LIMIT`, plus the aggregates `COUNT`, `SUM`,
+`AVG`, `MIN`, `MAX`. Writes, subqueries, comments, multiple statements, and other functions
+are not available — do not attempt them. Run `rpeek help sql` for the exact grammar before
+composing non-trivial queries; if a query is rejected or reports an unknown table or
+column, read the message and fix the query rather than retrying it unchanged.
 
 ## Rules
 - Use only the tools `rpeek help` reports. Do not invent flags or tools; there is no

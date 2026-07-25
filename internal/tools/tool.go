@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"rpeek/internal/dbconn"
 )
 
 // Tool is one read-only diagnostic operation's identity and argument parsing. Execution
@@ -86,6 +88,10 @@ type Env struct {
 
 	// Journalctl is the resolved journalctl path, or "" when it is unavailable.
 	Journalctl string
+
+	// DB is the registry of databases the sql and db-* tools may query, or nil when no
+	// --db alias is configured or in a client-supplied Env.
+	DB *dbconn.Registry
 }
 
 // Result is the non-error outcome of a tool's execution.

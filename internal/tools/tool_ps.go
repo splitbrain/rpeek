@@ -65,6 +65,11 @@ func (ps) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, err
 		return Result{}, err
 	}
 
+	// The server runs this tool in its own process, so its own command line — which may
+	// carry a --db DSN and its password — would otherwise appear in the output. Show only
+	// the program name for that one process, dropping its arguments.
+	self := os.Getpid()
+
 	userCache := map[uint32]string{}
 	lookupUser := func(uid uint32) string {
 		if name, ok := userCache[uid]; ok {
@@ -98,6 +103,9 @@ func (ps) Remote(ctx context.Context, env Env, raw json.RawMessage) (Result, err
 		row, ok := readProc(pid, lookupUser)
 		if !ok {
 			continue // process exited between listing and reading
+		}
+		if row.pid == self {
+			row.cmd = os.Args[0]
 		}
 		rows = append(rows, row)
 	}

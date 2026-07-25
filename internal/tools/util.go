@@ -62,16 +62,22 @@ func clampLimit(requested, def, max int) int {
 	return requested
 }
 
-// singlePath requires exactly one positional argument and returns it.
-func singlePath(tool string, pos []string) (string, error) {
+// oneArg requires exactly one positional argument and returns it. what names the argument
+// in error messages as a bare noun, e.g. "path" or "table name".
+func oneArg(tool, what string, pos []string) (string, error) {
 	switch len(pos) {
 	case 0:
-		return "", fmt.Errorf("%s requires a path", tool)
+		return "", fmt.Errorf("%s requires a %s", tool, what)
 	case 1:
 		return pos[0], nil
 	default:
-		return "", fmt.Errorf("%s takes a single path, got %d arguments", tool, len(pos))
+		return "", fmt.Errorf("%s takes a single %s, got %d arguments", tool, what, len(pos))
 	}
+}
+
+// singlePath requires exactly one positional path argument and returns it.
+func singlePath(tool string, pos []string) (string, error) {
+	return oneArg(tool, "path", pos)
 }
 
 // noPositionals requires that no positional arguments were given.

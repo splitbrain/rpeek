@@ -31,7 +31,10 @@ make build      # static binary into bin/rpeek, version stamped from git
 make help       # list all targets
 ```
 
-No third-party dependencies — standard library only.
+Dependencies: the standard library, plus the [goqu](https://github.com/doug-martin/goqu)
+SQL builder and the PostgreSQL, MySQL, and SQLite drivers that back the `sql` tool. All are
+pure Go (no cgo), so the binary builds with `CGO_ENABLED=0` and cross-compiles to a single
+static file.
 
 ## Run the server
 
@@ -42,6 +45,10 @@ directory.
 ```sh
 rpeek serve /var/log /etc       # two jail roots
 rpeek serve                     # one jail root: the current working directory
+
+rpeek serve /var/log --db app=postgres://user:pw@localhost/appdb  # also expose a PostgreSQL database as "app"
+rpeek serve /var/log --db app=mysql://user:pw@localhost/appdb     # a MySQL database
+rpeek serve /var/log --db app=sqlite:///var/lib/app.db            # a SQLite database
 ```
 
 Startup prints a banner including the token.
@@ -71,12 +78,46 @@ rpeek stat  /etc/hosts
 rpeek ps
 rpeek disk
 rpeek journal --unit nginx --lines 100
+rpeek db-list
+rpeek db-tables --db app
+rpeek db-schema --db app orders
+rpeek sql --db app "SELECT state, COUNT(*) AS n FROM orders GROUP BY state ORDER BY n DESC"
 ```
 
 Exit codes: `0` success, `1` protocol/transport error, `2` server-returned error,
 `3` usage error.
 
-## Security model and its limits
+## Querying databases
+
+The `sql`, `db-list`, `db-tables`, and `db-schema` tools read application databases. The
+client selects a connection by providing an **alias** the operator configured at serve
+time.
+
+Connections are configured with the repeatable `--db alias=dsn` flag (shown above) or a
+`RPEEK_DB_<ALIAS>` environment variable. The environment form is preferred for secrets,
+because a DSN on the command line is visible to `ps`.
+
+```sh
+RPEEK_DB_APP=postgres://user:pw@localhost/appdb rpeek serve /var/log
+```
+
+Only three DSN schemes are accepted — `postgres://`, `mysql://`, and `sqlite://`
+(`sqlite:///abs/path` or `sqlite://rel/path`) — and any other is rejected at startup.
+
+Each connection addresses a single schema. MySQL uses the database named in the DSN, and
+PostgreSQL uses the schema at the head of the connection's `search_path` — `public` for a
+plain DSN. To target another PostgreSQL schema, set it in the DSN with `?search_path=`; the
+`db-tables`, `db-schema`, and `sql` tools then all resolve against that one schema:
+
+```sh
+RPEEK_DB_APP=postgres://user:pw@localhost/appdb?search_path=reporting rpeek serve /var/log
+```
+
+The `sql` tool does not accept arbitrary SQL. It parses a restricted, `SELECT`-only grammar
+that cannot express a write, so it is read-only on any account with no privilege check
+required. Run `rpeek help sql` for the grammar.
+
+## Transport Security and its limits
 
 TLS encryption protects against **passive eavesdropping**. Because the client does not
 verify the certificate, an **active man-in-the-middle** who can intercept the connection

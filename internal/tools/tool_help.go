@@ -90,8 +90,15 @@ func GeneralHelp() string {
 	return b.String()
 }
 
-// ToolHelp returns one tool's usage line, summary, and flags. The shared --host/--token
-// flags are described once in the footer rather than in the flag list.
+// DetailedHelp is an optional Tool capability: a tool implements it to append a longer
+// explanation — beyond the one-line summary — to its "help <tool>" output.
+type DetailedHelp interface {
+	// Help returns the extended help text shown after the flags.
+	Help() string
+}
+
+// ToolHelp returns one tool's usage line, summary, flags, and any detailed help. The shared
+// --host/--token flags are described once in the footer rather than in the flag list.
 func ToolHelp(tool Tool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Usage: rpeek [--host HOST[:PORT]] [--token TOKEN] %s\n\n  %s\n", tool.Usage(), tool.Summary())
@@ -103,6 +110,11 @@ func ToolHelp(tool Tool) string {
 		b.WriteString("\nFlags:\n")
 		fs.SetOutput(&b)
 		fs.PrintDefaults()
+	}
+	if dh, ok := tool.(DetailedHelp); ok {
+		b.WriteString("\n")
+		b.WriteString(strings.TrimRight(dh.Help(), "\n"))
+		b.WriteString("\n")
 	}
 	if _, ok := tool.(ServerMode); ok {
 		b.WriteString("\nRoots are the directories file tools may read within; with none given,\n")

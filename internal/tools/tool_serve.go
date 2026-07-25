@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"rpeek/internal/conf"
+	"rpeek/internal/dbconn"
 	"rpeek/internal/netutil"
 	"rpeek/internal/server"
 	"rpeek/internal/tlsutil"
@@ -60,6 +61,9 @@ type serveArgs struct {
 	Timeout time.Duration `json:"timeout,omitempty"`
 	// Roots are the jail roots file tools may read within; empty means the working directory.
 	Roots []string `json:"roots,omitempty"`
+	// DBs maps a database alias to its DSN, from the repeatable --db flag. Env-configured
+	// aliases (RPEEK_DB_<ALIAS>) are merged in at serve time.
+	DBs map[string]string `json:"dbs,omitempty"`
 }
 
 // NewFlags builds the serve flag set and its argument builder. Positional arguments are
@@ -71,7 +75,13 @@ func (serveTool) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 	ttl := fs.Duration("ttl", 30*time.Minute, "auto-shutdown after this duration; 0 disables")
 	maxOutput := fs.Int("max-output", 1<<20, "global output byte cap applied by tools")
 	timeout := fs.Duration("timeout", 15*time.Second, "per-tool wall-clock timeout")
+	var dbs kvFlag
+	fs.Var(&dbs, "db", "database as alias=dsn (repeatable; DSN also via RPEEK_DB_<ALIAS>)")
 	return fs, func(pos []string) (any, error) {
+		dbMap, err := dbs.pairs()
+		if err != nil {
+			return nil, err
+		}
 		return serveArgs{
 			Host:      *host,
 			Token:     *token,
@@ -79,8 +89,44 @@ func (serveTool) NewFlags() (*flag.FlagSet, func([]string) (any, error)) {
 			MaxOutput: *maxOutput,
 			Timeout:   *timeout,
 			Roots:     pos,
+			DBs:       dbMap,
 		}, nil
 	}
+}
+
+// kvFlag collects repeated "alias=dsn" flag values.
+type kvFlag []string
+
+// String renders the collected values for the flag package.
+func (k *kvFlag) String() string { return strings.Join(*k, ",") }
+
+// Set appends one --db value.
+func (k *kvFlag) Set(v string) error {
+	*k = append(*k, v)
+	return nil
+}
+
+// pairs parses the collected values into an alias→dsn map, rejecting a malformed spec or a
+// duplicate alias. Aliases are lower-cased to match the RPEEK_DB_<ALIAS> environment form,
+// so the two configuration sources address a connection by the same name and an explicit
+// --db reliably overrides an env-configured alias of the same spelling.
+func (k kvFlag) pairs() (map[string]string, error) {
+	if len(k) == 0 {
+		return nil, nil
+	}
+	m := make(map[string]string, len(k))
+	for _, spec := range k {
+		alias, dsn, ok := strings.Cut(spec, "=")
+		if !ok || alias == "" || dsn == "" {
+			return nil, fmt.Errorf("invalid --db %q: want alias=dsn", spec)
+		}
+		alias = strings.ToLower(alias)
+		if _, dup := m[alias]; dup {
+			return nil, fmt.Errorf("duplicate --db alias %q", alias)
+		}
+		m[alias] = dsn
+	}
+	return m, nil
 }
 
 // Serve builds the jail and TLS listener from the decoded arguments, prints the startup
@@ -119,6 +165,21 @@ func (serveTool) Serve(ctx context.Context, raw json.RawMessage, stdout io.Write
 		}
 	}
 
+	// Merge database aliases from the environment with those given on the command line;
+	// an explicit --db alias overrides an env-configured one of the same name.
+	dbSpecs := conf.DBSpecs()
+	for alias, dsn := range args.DBs {
+		dbSpecs[alias] = dsn
+	}
+	var registry *dbconn.Registry
+	if len(dbSpecs) > 0 {
+		registry, err = dbconn.New(dbSpecs)
+		if err != nil {
+			return fmt.Errorf("cannot configure databases: %v", err)
+		}
+		defer registry.Close()
+	}
+
 	tlsCfg, err := tlsutil.ServerTLSConfig()
 	if err != nil {
 		return fmt.Errorf("cannot create TLS config: %v", err)
@@ -135,6 +196,7 @@ func (serveTool) Serve(ctx context.Context, raw json.RawMessage, stdout io.Write
 		Jail:       jail,
 		Limits:     Limits{MaxOutput: args.MaxOutput, Timeout: args.Timeout},
 		Journalctl: journalctlPath,
+		DB:         registry,
 	})
 	srv := server.NewServer(runner, token, logger)
 
@@ -145,7 +207,7 @@ func (serveTool) Serve(ctx context.Context, raw json.RawMessage, stdout io.Write
 		defer t.Stop()
 	}
 
-	serveBanner(stdout, listenAddr, jail.Roots(), token, args.TTL)
+	serveBanner(stdout, listenAddr, jail.Roots(), token, args.TTL, registry)
 
 	if err := srv.Serve(sctx, ln); err != nil {
 		return fmt.Errorf("server error: %v", err)
@@ -163,8 +225,10 @@ func generateToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// serveBanner writes the startup banner describing the server's configuration to w.
-func serveBanner(w io.Writer, listen string, roots []string, token string, ttl time.Duration) {
+// serveBanner writes the startup banner describing the server's configuration to w. The
+// database line lists each alias with its engine and host only; the DSN and its password
+// are never printed.
+func serveBanner(w io.Writer, listen string, roots []string, token string, ttl time.Duration, registry *dbconn.Registry) {
 	ttlLine := "disabled (WARNING: server runs until stopped)"
 	if ttl > 0 {
 		ttlLine = fmt.Sprintf("%s (shuts down ~%s)", ttl, time.Now().Add(ttl).Format("15:04"))
@@ -175,5 +239,22 @@ func serveBanner(w io.Writer, listen string, roots []string, token string, ttl t
 	fmt.Fprintf(w, "token  : %s   (pass to the client via --token or RPEEK_TOKEN)\n", token)
 	fmt.Fprintf(w, "ttl    : %s\n", ttlLine)
 	fmt.Fprintln(w, "tls    : ad-hoc self-signed; client skips verification by design")
+	if registry != nil && len(registry.Aliases()) > 0 {
+		fmt.Fprintf(w, "dbs    : %s   (passwords redacted)\n", bannerDBs(registry))
+	}
 	fmt.Fprintf(w, "tools  : %s   (READ-ONLY)\n", strings.Join(RemoteNames(), " "))
+}
+
+// bannerDBs renders the configured databases as "alias → engine@host" entries, without any
+// credentials.
+func bannerDBs(registry *dbconn.Registry) string {
+	var parts []string
+	for _, alias := range registry.Aliases() {
+		conn, ok := registry.Lookup(alias)
+		if !ok {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s → %s@%s", alias, conn.Engine(), conn.Host()))
+	}
+	return strings.Join(parts, ", ")
 }
