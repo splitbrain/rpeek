@@ -60,9 +60,13 @@ Examples:
   sql --db app "SELECT status, COUNT(*) AS n FROM orders GROUP BY status ORDER BY n DESC"
   sql --db app "SELECT u.name, o.amount FROM users u JOIN orders o ON o.uid = u.id WHERE o.state = 'failed'"
 
-LIKE is case-sensitive and ILIKE is case-insensitive on every engine, so the
-choice of predicate — not the database's default collation — decides case
-sensitivity. In a pattern, % matches any run of characters and _ matches one.
+LIKE is case-sensitive and ILIKE is case-insensitive on every engine, and on
+every column regardless of its collation, so the choice of predicate — not the
+database — decides case sensitivity. In a pattern, % matches any run of
+characters and _ matches exactly one. The one thing that still differs between
+engines is how ILIKE folds non-ASCII letters (accented, Greek, Cyrillic, and
+the like): that follows each database's own lower-casing, and SQLite folds only
+ASCII. ILIKE on plain ASCII is identical everywhere; for non-ASCII it is not.
 
 A missing LIMIT applies a server default; results are capped and may be truncated.`
 }

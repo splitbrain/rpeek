@@ -55,27 +55,36 @@ func TestTranslateGolden(t *testing.T) {
 			wantSQL: `SELECT "users"."id" FROM "users" WHERE ((("users"."id" IN ($1, $2, $3)) AND ("users"."name" LIKE $4)) AND ("users"."age" BETWEEN $5 AND $6))`,
 			wantArg: []string{"1", "2", "3", "A%", "18", "65"},
 		},
+		// ILIKE folds both operands with LOWER on every engine, so the match is
+		// case-insensitive independent of the column's collation. On MySQL the underlying
+		// LIKE renders as the byte-wise LIKE BINARY, which is exactly what makes it
+		// collation-independent there.
 		{
-			name:    "ilike postgres",
+			name:    "ilike lowers both sides postgres",
 			query:   `SELECT id FROM users WHERE name ILIKE 'a%'`,
 			engine:  EnginePostgres,
-			wantSQL: `SELECT "users"."id" FROM "users" WHERE ("users"."name" ILIKE $1)`,
+			wantSQL: `SELECT "users"."id" FROM "users" WHERE (LOWER("users"."name") LIKE LOWER($1))`,
 			wantArg: []string{"a%"},
 		},
 		{
-			name:    "ilike maps to like mysql",
+			name:    "ilike lowers both sides mysql",
 			query:   `SELECT id FROM users WHERE name ILIKE 'a%'`,
 			engine:  EngineMySQL,
-			wantSQL: "SELECT `users`.`id` FROM `users` WHERE (`users`.`name` LIKE ?)",
+			wantSQL: "SELECT `users`.`id` FROM `users` WHERE (LOWER(`users`.`name`) LIKE BINARY LOWER(?))",
 			wantArg: []string{"a%"},
 		},
 		{
-			// SQLite has no case-insensitive operator once case_sensitive_like is on, so
-			// ILIKE folds both sides with LOWER.
 			name:    "ilike lowers both sides sqlite",
 			query:   `SELECT id FROM users WHERE name ILIKE 'a%'`,
 			engine:  EngineSQLite,
 			wantSQL: "SELECT `users`.`id` FROM `users` WHERE (LOWER(`users`.`name`) LIKE LOWER(?))",
+			wantArg: []string{"a%"},
+		},
+		{
+			name:    "not ilike lowers both sides mysql",
+			query:   `SELECT id FROM users WHERE NOT name ILIKE 'a%'`,
+			engine:  EngineMySQL,
+			wantSQL: "SELECT `users`.`id` FROM `users` WHERE (LOWER(`users`.`name`) NOT LIKE BINARY LOWER(?))",
 			wantArg: []string{"a%"},
 		},
 		{
@@ -85,9 +94,10 @@ func TestTranslateGolden(t *testing.T) {
 			wantSQL: "SELECT `users`.`id` FROM `users` WHERE (LOWER(`users`.`name`) NOT LIKE LOWER(?))",
 			wantArg: []string{"a%"},
 		},
+		// LIKE is a collation-independent, case-sensitive match on every engine: plain LIKE
+		// on PostgreSQL, the byte-wise LIKE BINARY on MySQL, and LIKE on SQLite whose
+		// connection sets case_sensitive_like (which does not change the emitted SQL).
 		{
-			// LIKE is a plain case-sensitive match on SQLite; case_sensitive_like on the
-			// connection makes it case-sensitive without changing the emitted SQL.
 			name:    "like case sensitive sqlite",
 			query:   `SELECT id FROM users WHERE name LIKE 'a%'`,
 			engine:  EngineSQLite,
@@ -102,10 +112,10 @@ func TestTranslateGolden(t *testing.T) {
 			wantArg: []string{"a%"},
 		},
 		{
-			name:    "not ilike postgres",
-			query:   `SELECT id FROM users WHERE NOT name ILIKE 'a%'`,
+			name:    "like case sensitive postgres",
+			query:   `SELECT id FROM users WHERE name LIKE 'a%'`,
 			engine:  EnginePostgres,
-			wantSQL: `SELECT "users"."id" FROM "users" WHERE ("users"."name" NOT ILIKE $1)`,
+			wantSQL: `SELECT "users"."id" FROM "users" WHERE ("users"."name" LIKE $1)`,
 			wantArg: []string{"a%"},
 		},
 		{

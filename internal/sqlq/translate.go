@@ -21,7 +21,7 @@ func Translate(q *Query, engine Engine) (string, []any, error) {
 	ds := goqu.Dialect(engine.dialect()).From(tableExpr(q.From))
 
 	for _, j := range q.Joins {
-		on, err := buildCond(j.On, false, engine)
+		on, err := buildCond(j.On, false)
 		if err != nil {
 			return "", nil, err
 		}
@@ -48,7 +48,7 @@ func Translate(q *Query, engine Engine) (string, []any, error) {
 	}
 
 	if q.Where != nil {
-		where, err := buildCond(q.Where, false, engine)
+		where, err := buildCond(q.Where, false)
 		if err != nil {
 			return "", nil, err
 		}
@@ -154,18 +154,18 @@ func aggExpr(agg string, arg interface{}) exp.SQLFunctionExpression {
 	}
 }
 
-// buildCond translates a condition into a goqu expression for the given engine. The negate
-// flag is pushed down through the tree by De Morgan's laws — AND becomes OR and vice versa,
-// and each predicate switches to its negated form — because the builder has no generic NOT
-// wrapper. This keeps every value bound with no literal SQL.
-func buildCond(c Condition, negate bool, engine Engine) (exp.Expression, error) {
+// buildCond translates a condition into a goqu expression. The negate flag is pushed down
+// through the tree by De Morgan's laws — AND becomes OR and vice versa, and each predicate
+// switches to its negated form — because the builder has no generic NOT wrapper. This keeps
+// every value bound with no literal SQL.
+func buildCond(c Condition, negate bool) (exp.Expression, error) {
 	switch v := c.(type) {
 	case Logical:
-		left, err := buildCond(v.Left, negate, engine)
+		left, err := buildCond(v.Left, negate)
 		if err != nil {
 			return nil, err
 		}
-		right, err := buildCond(v.Right, negate, engine)
+		right, err := buildCond(v.Right, negate)
 		if err != nil {
 			return nil, err
 		}
@@ -175,7 +175,7 @@ func buildCond(c Condition, negate bool, engine Engine) (exp.Expression, error) 
 		}
 		return goqu.Or(left, right), nil
 	case Not:
-		return buildCond(v.Cond, !negate, engine)
+		return buildCond(v.Cond, !negate)
 	case Comparison:
 		return compareExpr(v, negate), nil
 	case In:
@@ -186,7 +186,7 @@ func buildCond(c Condition, negate bool, engine Engine) (exp.Expression, error) 
 		}
 		return id.In(vals...), nil
 	case Like:
-		return likeExpr(v, negate, engine), nil
+		return likeExpr(v, negate), nil
 	case IsNull:
 		id := colIdent(v.Col)
 		if v.Negate != negate {
@@ -205,38 +205,34 @@ func buildCond(c Condition, negate bool, engine Engine) (exp.Expression, error) 
 	}
 }
 
-// likeExpr translates a LIKE or ILIKE predicate so that, across every engine, LIKE is
-// case-sensitive and ILIKE is case-insensitive.
+// likeExpr translates a LIKE or ILIKE predicate so that LIKE is case-sensitive and ILIKE is
+// case-insensitive on every engine, independent of the column's collation.
 //
-// LIKE maps to goqu's Like, which the dialects render as a case-sensitive match: plain LIKE
-// on PostgreSQL, LIKE BINARY on MySQL, and — because the SQLite connection is opened with
-// case_sensitive_like enabled — a case-sensitive LIKE on SQLite too.
+// Both build on goqu's Like, which each dialect renders as a collation-independent
+// case-sensitive match: plain LIKE on PostgreSQL, LIKE BINARY (a byte comparison) on MySQL,
+// and — because the SQLite connection sets case_sensitive_like — a case-sensitive LIKE on
+// SQLite. That is emitted directly for LIKE.
 //
-// ILIKE must be case-insensitive everywhere. On PostgreSQL and MySQL goqu's ILike renders
-// the engines' own case-insensitive form (ILIKE and a bare LIKE respectively). SQLite has no
-// case-insensitive operator once case_sensitive_like is on, so ILIKE is expressed as
-// LOWER(col) LIKE LOWER(pattern); the LOWER on both sides folds ASCII case while leaving the
-// % and _ wildcards untouched, and the pattern stays a bound parameter.
-func likeExpr(v Like, negate bool, engine Engine) exp.Expression {
-	id := colIdent(v.Col)
-	if v.Insensitive && engine == EngineSQLite {
-		lhs := goqu.Func("LOWER", id)
-		rhs := goqu.Func("LOWER", v.Pattern.Go)
-		if negate {
-			return lhs.NotLike(rhs)
-		}
-		return lhs.Like(rhs)
+// ILIKE folds ASCII case on both operands with LOWER before the same case-sensitive match:
+// LOWER(col) LIKE LOWER(pattern). Because both sides are already lower-cased, the match is
+// case-insensitive whatever the column's collation, and lowering the pattern rather than
+// switching to an engine's own case-insensitive operator keeps the behaviour identical
+// across engines. LOWER leaves the % and _ wildcards untouched and the pattern stays a bound
+// parameter. The one behaviour that is not identical across engines is folding of non-ASCII
+// characters, which follows each database's built-in LOWER — see the sql tool help.
+func likeExpr(v Like, negate bool) exp.Expression {
+	var lhs, rhs interface{} = colIdent(v.Col), v.Pattern.Go
+	if v.Insensitive {
+		lhs = goqu.Func("LOWER", lhs)
+		rhs = goqu.Func("LOWER", rhs)
 	}
-	switch {
-	case v.Insensitive && negate:
-		return id.NotILike(v.Pattern.Go)
-	case v.Insensitive:
-		return id.ILike(v.Pattern.Go)
-	case negate:
-		return id.NotLike(v.Pattern.Go)
-	default:
-		return id.Like(v.Pattern.Go)
+	// goqu exposes Like/NotLike on both identifier and function expressions through the
+	// Likeable interface.
+	cmp := lhs.(exp.Likeable)
+	if negate {
+		return cmp.NotLike(rhs)
 	}
+	return cmp.Like(rhs)
 }
 
 // compareExpr translates a comparison, flipping the operator to its opposite under negation.

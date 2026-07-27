@@ -108,6 +108,50 @@ func TestSQLToolJoinAggregate(t *testing.T) {
 	}
 }
 
+// TestSQLToolLikeCaseSensitivity is the end-to-end proof that LIKE is case-sensitive and
+// ILIKE is case-insensitive through the whole pipeline against a live database: LIKE only
+// matches the exact case, while ILIKE matches regardless of case. It runs on SQLite, whose
+// built-in LIKE is case-insensitive by default — the case the earlier implementation got
+// wrong — so a green result here means the connection pragma and the translation are both
+// doing their jobs.
+func TestSQLToolLikeCaseSensitivity(t *testing.T) {
+	reg, _ := seedDB(t)
+	env := dbEnv(reg)
+
+	run := func(query string) string {
+		t.Helper()
+		res, err := sqlTool{}.Remote(context.Background(), env, mustRaw(t, sqlArgs{DB: "app", Query: query}))
+		if err != nil {
+			t.Fatalf("query %q failed: %v", query, err)
+		}
+		return res.Output
+	}
+	has := func(out, name string) bool { return strings.Contains(out, name) }
+
+	// LIKE is case-sensitive: the lower-case pattern matches 'alice', the upper-case one
+	// matches nothing.
+	if out := run(`SELECT name FROM users WHERE name LIKE 'alice'`); !has(out, "alice") {
+		t.Errorf("LIKE 'alice' should match alice:\n%s", out)
+	}
+	if out := run(`SELECT name FROM users WHERE name LIKE 'ALICE'`); has(out, "alice") {
+		t.Errorf("LIKE 'ALICE' must not match alice (LIKE is case-sensitive):\n%s", out)
+	}
+	if out := run(`SELECT name FROM users WHERE name LIKE 'A%'`); has(out, "alice") {
+		t.Errorf("LIKE 'A%%' must not match alice (LIKE is case-sensitive):\n%s", out)
+	}
+
+	// ILIKE is case-insensitive: every casing of the pattern matches 'alice'.
+	for _, pat := range []string{"alice", "ALICE", "Alice", "A%", "a%"} {
+		if out := run(`SELECT name FROM users WHERE name ILIKE '` + pat + `'`); !has(out, "alice") {
+			t.Errorf("ILIKE '%s' should match alice (ILIKE is case-insensitive):\n%s", pat, out)
+		}
+	}
+	// NOT ILIKE is the exact complement: 'ALICE' excludes alice.
+	if out := run(`SELECT name FROM users WHERE NOT name ILIKE 'ALICE'`); has(out, "alice") {
+		t.Errorf("NOT ILIKE 'ALICE' must exclude alice:\n%s", out)
+	}
+}
+
 // TestSQLToolAdversarialWrites is the end-to-end security test: every write attempt is
 // rejected as a grammar error and the data is unchanged, on a superuser-equivalent
 // connection with no privilege check in the way.
