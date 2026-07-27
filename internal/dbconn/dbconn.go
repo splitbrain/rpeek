@@ -237,11 +237,15 @@ func hardenMySQLConfig(cfg *mysql.Config) {
 	delete(cfg.Params, "allowAllFiles")
 }
 
-// sqliteDSN converts a sqlite:// DSN to the modernc file URI with query_only enabled and
-// returns it with the underlying file path. An absolute path is written sqlite:///path and a
-// relative one sqlite://path; both reduce to stripping the scheme. query_only makes every
-// pooled connection reject writes, the read-only enforcement SQLite's read-only transaction
-// option does not provide.
+// sqliteDSN converts a sqlite:// DSN to the modernc file URI with query_only and
+// case_sensitive_like enabled and returns it with the underlying file path. An absolute path
+// is written sqlite:///path and a relative one sqlite://path; both reduce to stripping the
+// scheme. query_only makes every pooled connection reject writes, the read-only enforcement
+// SQLite's read-only transaction option does not provide. case_sensitive_like makes LIKE
+// case-sensitive on every pooled connection, so LIKE means the same thing on SQLite as it
+// does on PostgreSQL and MySQL; the case-insensitive ILIKE predicate is translated
+// explicitly rather than relying on SQLite's default LIKE folding. Both _pragma parameters
+// are applied by modernc on each new connection.
 func sqliteDSN(dsn string) (openDSN, path string) {
 	path = strings.TrimPrefix(dsn, "sqlite://")
 	// Strip any existing query string from the reported path for a clean display value.
@@ -254,5 +258,5 @@ func sqliteDSN(dsn string) (openDSN, path string) {
 	if strings.Contains(path, "?") {
 		sep = "&"
 	}
-	return "file:" + path + sep + "_pragma=query_only(1)", displayPath
+	return "file:" + path + sep + "_pragma=query_only(1)&_pragma=case_sensitive_like(1)", displayPath
 }

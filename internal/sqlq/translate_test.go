@@ -70,10 +70,35 @@ func TestTranslateGolden(t *testing.T) {
 			wantArg: []string{"a%"},
 		},
 		{
-			name:    "ilike maps to like sqlite",
+			// SQLite has no case-insensitive operator once case_sensitive_like is on, so
+			// ILIKE folds both sides with LOWER.
+			name:    "ilike lowers both sides sqlite",
 			query:   `SELECT id FROM users WHERE name ILIKE 'a%'`,
 			engine:  EngineSQLite,
+			wantSQL: "SELECT `users`.`id` FROM `users` WHERE (LOWER(`users`.`name`) LIKE LOWER(?))",
+			wantArg: []string{"a%"},
+		},
+		{
+			name:    "not ilike lowers both sides sqlite",
+			query:   `SELECT id FROM users WHERE NOT name ILIKE 'a%'`,
+			engine:  EngineSQLite,
+			wantSQL: "SELECT `users`.`id` FROM `users` WHERE (LOWER(`users`.`name`) NOT LIKE LOWER(?))",
+			wantArg: []string{"a%"},
+		},
+		{
+			// LIKE is a plain case-sensitive match on SQLite; case_sensitive_like on the
+			// connection makes it case-sensitive without changing the emitted SQL.
+			name:    "like case sensitive sqlite",
+			query:   `SELECT id FROM users WHERE name LIKE 'a%'`,
+			engine:  EngineSQLite,
 			wantSQL: "SELECT `users`.`id` FROM `users` WHERE (`users`.`name` LIKE ?)",
+			wantArg: []string{"a%"},
+		},
+		{
+			name:    "like case sensitive mysql",
+			query:   `SELECT id FROM users WHERE name LIKE 'a%'`,
+			engine:  EngineMySQL,
+			wantSQL: "SELECT `users`.`id` FROM `users` WHERE (`users`.`name` LIKE BINARY ?)",
 			wantArg: []string{"a%"},
 		},
 		{

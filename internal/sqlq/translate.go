@@ -21,7 +21,7 @@ func Translate(q *Query, engine Engine) (string, []any, error) {
 	ds := goqu.Dialect(engine.dialect()).From(tableExpr(q.From))
 
 	for _, j := range q.Joins {
-		on, err := buildCond(j.On, false)
+		on, err := buildCond(j.On, false, engine)
 		if err != nil {
 			return "", nil, err
 		}
@@ -48,7 +48,7 @@ func Translate(q *Query, engine Engine) (string, []any, error) {
 	}
 
 	if q.Where != nil {
-		where, err := buildCond(q.Where, false)
+		where, err := buildCond(q.Where, false, engine)
 		if err != nil {
 			return "", nil, err
 		}
@@ -154,18 +154,18 @@ func aggExpr(agg string, arg interface{}) exp.SQLFunctionExpression {
 	}
 }
 
-// buildCond translates a condition into a goqu expression. The negate flag is pushed down
-// through the tree by De Morgan's laws — AND becomes OR and vice versa, and each predicate
-// switches to its negated form — because the builder has no generic NOT wrapper. This keeps
-// every value bound with no literal SQL.
-func buildCond(c Condition, negate bool) (exp.Expression, error) {
+// buildCond translates a condition into a goqu expression for the given engine. The negate
+// flag is pushed down through the tree by De Morgan's laws — AND becomes OR and vice versa,
+// and each predicate switches to its negated form — because the builder has no generic NOT
+// wrapper. This keeps every value bound with no literal SQL.
+func buildCond(c Condition, negate bool, engine Engine) (exp.Expression, error) {
 	switch v := c.(type) {
 	case Logical:
-		left, err := buildCond(v.Left, negate)
+		left, err := buildCond(v.Left, negate, engine)
 		if err != nil {
 			return nil, err
 		}
-		right, err := buildCond(v.Right, negate)
+		right, err := buildCond(v.Right, negate, engine)
 		if err != nil {
 			return nil, err
 		}
@@ -175,7 +175,7 @@ func buildCond(c Condition, negate bool) (exp.Expression, error) {
 		}
 		return goqu.Or(left, right), nil
 	case Not:
-		return buildCond(v.Cond, !negate)
+		return buildCond(v.Cond, !negate, engine)
 	case Comparison:
 		return compareExpr(v, negate), nil
 	case In:
@@ -186,20 +186,7 @@ func buildCond(c Condition, negate bool) (exp.Expression, error) {
 		}
 		return id.In(vals...), nil
 	case Like:
-		id := colIdent(v.Col)
-		// ILIKE is case-insensitive. goqu emits ILIKE on PostgreSQL and maps it to a plain
-		// LIKE on MySQL and SQLite, whose LIKE is already case-insensitive by default, so the
-		// three engines behave consistently.
-		switch {
-		case v.Insensitive && negate:
-			return id.NotILike(v.Pattern.Go), nil
-		case v.Insensitive:
-			return id.ILike(v.Pattern.Go), nil
-		case negate:
-			return id.NotLike(v.Pattern.Go), nil
-		default:
-			return id.Like(v.Pattern.Go), nil
-		}
+		return likeExpr(v, negate, engine), nil
 	case IsNull:
 		id := colIdent(v.Col)
 		if v.Negate != negate {
@@ -215,6 +202,40 @@ func buildCond(c Condition, negate bool) (exp.Expression, error) {
 		return id.Between(r), nil
 	default:
 		return nil, fmt.Errorf("internal error: unknown condition type %T", c)
+	}
+}
+
+// likeExpr translates a LIKE or ILIKE predicate so that, across every engine, LIKE is
+// case-sensitive and ILIKE is case-insensitive.
+//
+// LIKE maps to goqu's Like, which the dialects render as a case-sensitive match: plain LIKE
+// on PostgreSQL, LIKE BINARY on MySQL, and — because the SQLite connection is opened with
+// case_sensitive_like enabled — a case-sensitive LIKE on SQLite too.
+//
+// ILIKE must be case-insensitive everywhere. On PostgreSQL and MySQL goqu's ILike renders
+// the engines' own case-insensitive form (ILIKE and a bare LIKE respectively). SQLite has no
+// case-insensitive operator once case_sensitive_like is on, so ILIKE is expressed as
+// LOWER(col) LIKE LOWER(pattern); the LOWER on both sides folds ASCII case while leaving the
+// % and _ wildcards untouched, and the pattern stays a bound parameter.
+func likeExpr(v Like, negate bool, engine Engine) exp.Expression {
+	id := colIdent(v.Col)
+	if v.Insensitive && engine == EngineSQLite {
+		lhs := goqu.Func("LOWER", id)
+		rhs := goqu.Func("LOWER", v.Pattern.Go)
+		if negate {
+			return lhs.NotLike(rhs)
+		}
+		return lhs.Like(rhs)
+	}
+	switch {
+	case v.Insensitive && negate:
+		return id.NotILike(v.Pattern.Go)
+	case v.Insensitive:
+		return id.ILike(v.Pattern.Go)
+	case negate:
+		return id.NotLike(v.Pattern.Go)
+	default:
+		return id.Like(v.Pattern.Go)
 	}
 }
 

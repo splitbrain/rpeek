@@ -26,9 +26,9 @@ func TestResolveDSN(t *testing.T) {
 	}{
 		{"postgres://u:p@db.host:5432/app", sqlq.EnginePostgres, "pgx", "db.host:5432", "", ""},
 		{"mysql://u:p@db.host:3306/app", sqlq.EngineMySQL, "mysql", "db.host:3306", "@tcp(db.host:3306)", "multiStatements=true"},
-		{"sqlite:///var/lib/app.db", sqlq.EngineSQLite, "sqlite", "/var/lib/app.db", "_pragma=query_only(1)", ""},
-		{"sqlite://app.db", sqlq.EngineSQLite, "sqlite", "app.db", "_pragma=query_only(1)", ""},
-		{"sqlite:///var/lib/app.db?cache=shared", sqlq.EngineSQLite, "sqlite", "/var/lib/app.db", "_pragma=query_only(1)", ""},
+		{"sqlite:///var/lib/app.db", sqlq.EngineSQLite, "sqlite", "/var/lib/app.db", "_pragma=query_only(1)&_pragma=case_sensitive_like(1)", ""},
+		{"sqlite://app.db", sqlq.EngineSQLite, "sqlite", "app.db", "_pragma=query_only(1)&_pragma=case_sensitive_like(1)", ""},
+		{"sqlite:///var/lib/app.db?cache=shared", sqlq.EngineSQLite, "sqlite", "/var/lib/app.db", "_pragma=query_only(1)&_pragma=case_sensitive_like(1)", ""},
 	}
 	for _, c := range cases {
 		engine, driver, openDSN, host, err := resolveDSN(c.dsn)
@@ -164,6 +164,48 @@ func TestRegistry(t *testing.T) {
 func TestNewRejectsBadAlias(t *testing.T) {
 	if _, err := New(map[string]string{"bad-alias": "sqlite://x.db"}); err == nil {
 		t.Error("New with invalid alias should fail")
+	}
+}
+
+// TestCaseSensitiveLikePragma checks that the SQLite connection is opened with
+// case_sensitive_like enabled, so a plain LIKE — the SQL the translator emits for the LIKE
+// predicate — matches case-sensitively, the same as it does on PostgreSQL and MySQL. Without
+// the pragma SQLite's LIKE folds ASCII case and 'ALICE%' would match 'alice'.
+func TestCaseSensitiveLikePragma(t *testing.T) {
+	path := seedSQLite(t)
+	reg, err := New(map[string]string{"app": "sqlite://" + path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	conn, _ := reg.Lookup("app")
+
+	ctx := context.Background()
+	tx, err := conn.BeginReadOnly(ctx, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	count := func(where string) int {
+		t.Helper()
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE `+where).Scan(&n); err != nil {
+			t.Fatalf("query %q failed: %v", where, err)
+		}
+		return n
+	}
+
+	// Case-sensitive LIKE: the lower-case pattern matches, the upper-case one does not.
+	if n := count(`name LIKE 'alice%'`); n != 1 {
+		t.Errorf("LIKE 'alice%%' matched %d rows, want 1", n)
+	}
+	if n := count(`name LIKE 'ALICE%'`); n != 0 {
+		t.Errorf("LIKE 'ALICE%%' matched %d rows, want 0 (LIKE must be case-sensitive)", n)
+	}
+	// Case-insensitive form, as the translator renders ILIKE on SQLite once the pragma is on.
+	if n := count(`LOWER(name) LIKE LOWER('ALICE%')`); n != 1 {
+		t.Errorf("LOWER(name) LIKE LOWER('ALICE%%') matched %d rows, want 1", n)
 	}
 }
 
