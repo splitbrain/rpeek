@@ -291,7 +291,7 @@ func (r *resolver) rewriteCondition(c Condition) (Condition, error) {
 		if err != nil {
 			return nil, err
 		}
-		return Like{Col: col, Pattern: v.Pattern}, nil
+		return Like{Col: col, Pattern: v.Pattern, Insensitive: v.Insensitive}, nil
 	case IsNull:
 		col, err := r.resolveCol(v.Col, false)
 		if err != nil {

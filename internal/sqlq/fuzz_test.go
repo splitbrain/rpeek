@@ -13,6 +13,7 @@ func FuzzParse(f *testing.F) {
 		`SELECT * FROM users`,
 		`SELECT a, COUNT(*) FROM t GROUP BY a HAVING x`,
 		`SELECT a FROM t WHERE b IN (1,2) AND c LIKE 'x%' OR NOT d IS NULL`,
+		`SELECT a FROM t WHERE c ILIKE 'x%'`,
 		`SELECT a FROM t u JOIN v w ON w.k = u.k`,
 		`INSERT INTO t VALUES (1)`,
 		`SELECT 1; DROP TABLE t`,

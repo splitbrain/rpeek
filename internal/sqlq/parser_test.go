@@ -30,6 +30,9 @@ func TestParseAccepts(t *testing.T) {
 		`SELECT id FROM users WHERE status IN ('active', 'pending')`,
 		`SELECT id FROM users WHERE id IN (1, 2, 3)`,
 		`SELECT id FROM users WHERE name LIKE 'a%'`,
+		`SELECT id FROM users WHERE name ILIKE 'a%'`,
+		`SELECT id FROM users WHERE NOT name ILIKE 'a%'`,
+		`select id from users where name ilike 'A%'`, // case-insensitive keyword
 		`SELECT id FROM users WHERE email IS NULL`,
 		`SELECT id FROM users WHERE email IS NOT NULL`,
 		`SELECT id FROM users WHERE age BETWEEN 18 AND 65`,
@@ -101,6 +104,8 @@ func TestParseRejects(t *testing.T) {
 		`SELECT id FROM users WHERE age`,
 		`SELECT id FROM users WHERE LIKE 'x'`,
 		`SELECT id FROM users WHERE name LIKE 5`,
+		`SELECT id FROM users WHERE name ILIKE 5`,
+		`SELECT id FROM users WHERE ILIKE 'x'`,
 		`SELECT id FROM users WHERE age BETWEEN 1`,
 		`SELECT id FROM users WHERE age IN ()`,
 		`SELECT FROM users`,
@@ -166,6 +171,7 @@ func TestParseErrorMessages(t *testing.T) {
 		{`SELECT id FROM users;`, "unexpected character"},
 		{`SELECT LOWER(x) FROM users`, "expected FROM"},
 		{`SELECT id FROM users WHERE name LIKE 5`, "LIKE requires a string"},
+		{`SELECT id FROM users WHERE name ILIKE 5`, "ILIKE requires a string"},
 	}
 	for _, c := range cases {
 		_, err := Parse(c.in)

@@ -455,15 +455,17 @@ func (p *parser) parsePredicate() (Condition, error) {
 		}
 		return In{Col: col, Vals: vals}, nil
 
-	case p.acceptKeyword("LIKE"):
+	case p.isKeyword("LIKE") || p.isKeyword("ILIKE"):
+		kw := p.next().text
+		insensitive := kw == "ILIKE"
 		v, err := p.parseValue()
 		if err != nil {
 			return nil, err
 		}
 		if v.Kind != StringVal {
-			return nil, fmt.Errorf("LIKE requires a string pattern")
+			return nil, fmt.Errorf("%s requires a string pattern", kw)
 		}
-		return Like{Col: col, Pattern: v}, nil
+		return Like{Col: col, Pattern: v, Insensitive: insensitive}, nil
 
 	case p.acceptKeyword("IS"):
 		negate := p.acceptKeyword("NOT")
@@ -487,7 +489,7 @@ func (p *parser) parsePredicate() (Condition, error) {
 		return Between{Col: col, Low: low, High: high}, nil
 
 	default:
-		return nil, fmt.Errorf("expected a comparison operator, IN, LIKE, IS, or BETWEEN, got %s", describe(p.cur()))
+		return nil, fmt.Errorf("expected a comparison operator, IN, LIKE, ILIKE, IS, or BETWEEN, got %s", describe(p.cur()))
 	}
 }
 

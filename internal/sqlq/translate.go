@@ -187,10 +187,19 @@ func buildCond(c Condition, negate bool) (exp.Expression, error) {
 		return id.In(vals...), nil
 	case Like:
 		id := colIdent(v.Col)
-		if negate {
+		// ILIKE is case-insensitive. goqu emits ILIKE on PostgreSQL and maps it to a plain
+		// LIKE on MySQL and SQLite, whose LIKE is already case-insensitive by default, so the
+		// three engines behave consistently.
+		switch {
+		case v.Insensitive && negate:
+			return id.NotILike(v.Pattern.Go), nil
+		case v.Insensitive:
+			return id.ILike(v.Pattern.Go), nil
+		case negate:
 			return id.NotLike(v.Pattern.Go), nil
+		default:
+			return id.Like(v.Pattern.Go), nil
 		}
-		return id.Like(v.Pattern.Go), nil
 	case IsNull:
 		id := colIdent(v.Col)
 		if v.Negate != negate {

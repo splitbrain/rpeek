@@ -164,13 +164,16 @@ type In struct {
 	Vals []Value
 }
 
-// Like is "column LIKE 'pattern'".
+// Like is "column LIKE 'pattern'" or "column ILIKE 'pattern'".
 type Like struct {
 	// Col is the tested column.
 	Col Column
 
 	// Pattern is the string pattern value.
 	Pattern Value
+
+	// Insensitive is true for ILIKE (case-insensitive matching) and false for LIKE.
+	Insensitive bool
 }
 
 // IsNull is "column IS NULL" or "column IS NOT NULL".

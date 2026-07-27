@@ -48,7 +48,8 @@ Grammar:
   condition   : predicate, combined with AND / OR / NOT and parentheses
   predicate   : column OP (value | column)
               | column IN (value {, value})
-              | column LIKE 'pattern'
+              | column LIKE 'pattern'          (case-sensitive; see note)
+              | column ILIKE 'pattern'         (case-insensitive)
               | column IS [NOT] NULL
               | column BETWEEN value AND value
   OP          : = | != | <> | < | <= | > | >=
@@ -58,6 +59,10 @@ Grammar:
 Examples:
   sql --db app "SELECT status, COUNT(*) AS n FROM orders GROUP BY status ORDER BY n DESC"
   sql --db app "SELECT u.name, o.amount FROM users u JOIN orders o ON o.uid = u.id WHERE o.state = 'failed'"
+
+ILIKE matches case-insensitively on every engine. LIKE is case-sensitive on
+PostgreSQL and MySQL, but SQLite's LIKE always matches ASCII case-insensitively;
+use ILIKE when you need case-insensitivity everywhere.
 
 A missing LIMIT applies a server default; results are capped and may be truncated.`
 }
