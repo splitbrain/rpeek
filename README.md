@@ -67,6 +67,14 @@ Startup prints a banner including the token.
 
 Listen address and token may be overridden with the `--host` and `--token` flags or the `RPEEK_HOST` and `RPEEK_TOKEN` environment variables. The server runs until killed or until the `--ttl` expires.
 
+Hint if your a firewall blocks additional ports like the default `7017`, you can add a tunnel to your SSH connection:
+
+```
+ssh -L 7017:127.0.0.1:7017 user@remote.host
+```
+
+With the connection open, point the rpeek client to `localhost` instead of the remote host.
+
 Run `rpeek serve --help` for all flags.
 
 ## Run the client
