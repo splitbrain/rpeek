@@ -24,6 +24,18 @@ copy-pasting logs and configs by hand.
    internal panic → error.
 6. **Bounded output.** Every tool caps its output size and respects a timeout.
 
+## Install
+
+Download the latest release binary for the current platform into the working directory:
+
+```sh
+curl -fsSL https://github.com/splitbrain/rpeek/releases/latest/download/rpeek_$(uname -s)_$(uname -m).tar.gz | tar -xzf - rpeek
+```
+
+Append `-C /usr/local/bin` (with `sudo`) to unpack it somewhere on `PATH` instead. Releases
+cover Linux and macOS on amd64 and arm64, and each publishes a `SHA256SUMS` file to verify
+a download against.
+
 ## Build
 
 ```sh

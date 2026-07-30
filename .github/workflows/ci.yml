@@ -52,15 +52,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
-            os=${target%/*}
-            arch=${target#*/}
-            echo "Building ${os}/${arch}"
+          for target in linux/amd64:Linux_x86_64 linux/arm64:Linux_aarch64 \
+                        darwin/amd64:Darwin_x86_64 darwin/arm64:Darwin_arm64; do
+            platform=${target%%:*}
+            name=${target#*:}
+            os=${platform%/*}
+            arch=${platform#*/}
+            echo "Building ${os}/${arch} as ${name}"
             GOOS=$os GOARCH=$arch CGO_ENABLED=0 \
               go build -trimpath \
                 -ldflags "-s -w -X rpeek/internal/version.Version=${VERSION}" \
                 -o rpeek ./cmd/rpeek
-            tar -czf "dist/rpeek_${VERSION}_${os}_${arch}.tar.gz" rpeek README.md
+            tar -czf "dist/rpeek_${name}.tar.gz" rpeek README.md
             rm -f rpeek
           done
           ( cd dist && sha256sum *.tar.gz > SHA256SUMS )
